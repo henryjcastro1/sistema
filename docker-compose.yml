@@ -1,0 +1,50 @@
+services:
+
+  db:
+    image: postgres:16
+    container_name: demo1_db
+    restart: always
+    environment:
+      POSTGRES_DB: demo1
+      POSTGRES_USER: helpdeskuser
+      POSTGRES_PASSWORD: 12345
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql  # 👈 AUTO INIT
+
+  app:
+    build: .
+    container_name: demo1_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_USER: helpdeskuser
+      DB_PASSWORD: 12345
+      DB_HOST: db
+      DB_NAME: demo1
+      JWT_SECRET: supersecreto123   # 👈 AGREGAR ESTO
+
+    depends_on:
+      - db
+
+  n8n:
+    image: n8nio/n8n
+    container_name: demo1_n8n
+    restart: always
+    ports:
+      - "5679:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_DATABASE: demo1
+      DB_POSTGRESDB_USER: helpdeskuser
+      DB_POSTGRESDB_PASSWORD: 12345
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: softhjcm@gmail.com
+      N8N_BASIC_AUTH_PASSWORD: sofhjcm@
+    depends_on:
+      - db
+
+volumes:
+  db_data:
