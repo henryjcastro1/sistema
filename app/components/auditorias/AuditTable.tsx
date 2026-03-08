@@ -78,14 +78,14 @@ export default function AuditTable({
     });
   };
 
-  const formatJSON = (data: any) => {
-    if (!data) return '{}';
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
-    }
-  };
+const formatJSON = (data: unknown): string => {
+  if (!data) return '{}';
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data);
+  }
+};
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {

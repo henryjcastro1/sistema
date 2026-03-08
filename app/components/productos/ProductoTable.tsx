@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ProductoTableProps } from "@/app/productos/types";
+import { Producto, ProductoTableProps } from "@/app/productos/types";
 import { ToastContainer, useToast } from "../usuarios/Toast";
 
 export default function ProductoTable({ 
@@ -74,49 +74,47 @@ export default function ProductoTable({
     return 'text-green-600 bg-green-50 border-green-200';
   };
 
-  // Obtener moneda del producto
-  const getMonedaInfo = (producto: any) => {
+  // ✅ CORREGIDO: Tipado correcto en lugar de any
+  const getMonedaInfo = (producto: Producto) => {
     const moneda = monedas.find(m => m.id === producto.moneda_id);
     return moneda || { simbolo: '€', codigo: 'EUR' };
   };
 
   async function toggleProductoStatus(productoId: string, activo: boolean) {
-  setAccionLoading(productoId);
-  try {
-    console.log("🔵 Estado actual:", activo ? "Activo" : "Inactivo");
-    console.log("🔵 Enviando PATCH con activo:", !activo);
-    
-    const res = await fetch(`/api/productos/${productoId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: !activo })
-    });
+    setAccionLoading(productoId);
+    try {
+      console.log("🔵 Estado actual:", activo ? "Activo" : "Inactivo");
+      console.log("🔵 Enviando PATCH con activo:", !activo);
+      
+      const res = await fetch(`/api/productos/${productoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: !activo })
+      });
 
-    const data = await res.json();
-    console.log("📥 Respuesta:", data);
+      const data = await res.json();
+      console.log("📥 Respuesta:", data);
 
-    if (!res.ok) {
-      throw new Error(data.error || `Error ${res.status}`);
+      if (!res.ok) {
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+
+      const mensaje = activo ? 'Producto desactivado correctamente' : 'Producto activado correctamente';
+      console.log("✅ Mostrando toast:", mensaje);
+      
+      showToast(mensaje, 'success');
+      onRefresh();
+      
+    } catch (error) {
+      console.error("❌ Error:", error);
+      showToast(
+        error instanceof Error ? error.message : 'Error al actualizar producto',
+        'error'
+      );
+    } finally {
+      setAccionLoading(null);
     }
-
-    // Mensaje correcto según la acción
-    const mensaje = activo ? 'Producto desactivado correctamente' : 'Producto activado correctamente';
-    console.log("✅ Mostrando toast:", mensaje);
-    
-    showToast(mensaje, 'success'); // 👈 Asegurar 'success'
-    
-    onRefresh();
-    
-  } catch (error) {
-    console.error("❌ Error:", error);
-    showToast(
-      error instanceof Error ? error.message : 'Error al actualizar producto',
-      'error'  // 👈 Esto es error
-    );
-  } finally {
-    setAccionLoading(null);
   }
-}
 
   return (
     <>
@@ -153,7 +151,6 @@ export default function ProductoTable({
                 ))}
               </select>
             </div>
-
 
             {/* Filtro por Stock */}
             <div className="md:w-36">
@@ -246,22 +243,22 @@ export default function ProductoTable({
                             </div>
                           )}
                         </td>
-                        <td className="p-4">
-                          <div className="font-medium text-gray-900">{p.nombre}</div>
+                        <td className="p-4 max-w-xs">
+                          <div className="font-medium text-gray-900 truncate">{p.nombre}</div>
                           <div className="flex gap-2 mt-1">
                             {p.sku && (
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded whitespace-nowrap">
                                 SKU: {p.sku}
                               </span>
                             )}
                             {p.marca && (
-                              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded whitespace-nowrap">
                                 {p.marca}
                               </span>
                             )}
                           </div>
                           {p.descripcion && expandedRow === p.id && (
-                            <div className="text-xs text-gray-500 mt-2 border-t pt-2">
+                            <div className="text-xs text-gray-500 mt-2 border-t pt-2 max-w-md break-words whitespace-normal">
                               {p.descripcion}
                             </div>
                           )}

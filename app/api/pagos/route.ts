@@ -11,15 +11,10 @@ const UPLOAD_DIR = path.join(process.cwd(), "public/uploads/comprobantes");
 
 export async function POST(req: Request) {
   try {
-    // =====================================================
-    // 1. VERIFICAR AUTENTICACIÓN (VERSIÓN CORREGIDA)
-    // =====================================================
     
-    // Opción 1: Usar cookies() de Next.js (recomendado)
     const cookieStore = await cookies();
     const token = cookieStore.get('token')?.value;
     
-    // Opción 2: Si la anterior no funciona, usar headers
     let usuarioId;
     
     if (token) {

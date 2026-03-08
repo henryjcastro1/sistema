@@ -6,8 +6,8 @@ export interface AuditLog {
   accion: string;
   tabla: string;
   registro_id: string | null;
-  datos_antes: any;
-  datos_despues: any;
+  datos_antes: Record<string, unknown> | null;  //  Objeto con propiedades desconocidas
+  datos_despues: Record<string, unknown> | null; //  Objeto con propiedades desconocidas
   ip: string;
   user_agent: string;
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { FilterParams } from "@/app/config/auditoria/productos/types(copy)";
-import { AuditFiltersProps } from "@/app/config/auditoria/types";
+import { AuditFiltersProps, FilterParams } from "@/app/config/auditoria/types";
 import { useState } from "react";
 
 const TABLAS = [

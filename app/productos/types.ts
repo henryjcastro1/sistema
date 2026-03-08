@@ -1,6 +1,7 @@
 // =====================================================
 // TIPOS DE MONEDAS
 // =====================================================
+
 export interface Moneda {
   id: string;
   codigo: string;
@@ -57,6 +58,7 @@ export interface MonedaTableProps {
 // =====================================================
 // TIPOS DE CATEGORÍAS Y SUBCATEGORÍAS
 // =====================================================
+
 export interface Categoria {
   id: string;
   nombre: string;
@@ -79,6 +81,19 @@ export interface Subcategoria {
 // =====================================================
 // TIPOS DE PRODUCTOS
 // =====================================================
+
+export interface PrecioHistorico {
+  precio: number;
+  moneda_id: string;
+  fecha: string;
+}
+
+export interface Dimensiones {
+  largo: number;
+  ancho: number;
+  alto: number;
+}
+
 export interface Producto {
   id: string;
   nombre: string;
@@ -103,12 +118,8 @@ export interface Producto {
   modelo?: string;
   garantia_meses?: number;
   peso_kg?: number;
-  dimensiones?: {
-    largo: number;
-    ancho: number;
-    alto: number;
-  };
-  precios_historicos?: any[];
+  dimensiones?: Dimensiones;
+  precios_historicos?: PrecioHistorico[];
   created_at: string;
 }
 
@@ -127,11 +138,7 @@ export interface ProductoFormData {
   modelo?: string;
   garantia_meses?: number;
   peso_kg?: number;
-  dimensiones?: {
-    largo: number;
-    ancho: number;
-    alto: number;
-  };
+  dimensiones?: Dimensiones;
   destacado?: boolean;
 }
 
@@ -150,11 +157,7 @@ export interface ProductoEditData {
   modelo?: string;
   garantia_meses?: number;
   peso_kg?: number;
-  dimensiones?: {
-    largo: number;
-    ancho: number;
-    alto: number;
-  };
+  dimensiones?: Dimensiones;
   destacado?: boolean;
 }
 
@@ -187,6 +190,10 @@ export interface ProductoTableProps {
   monedas?: Moneda[];
 }
 
+// =====================================================
+// TIPOS DE AUDITORÍA
+// =====================================================
+
 export interface AuditLog {
   id: string;
   created_at: string;
@@ -195,10 +202,18 @@ export interface AuditLog {
   accion: string;
   tabla: string;
   registro_id: string | null;
-  datos_antes: any;
-  datos_despues: any;
+  datos_antes: Record<string, unknown> | null;
+  datos_despues: Record<string, unknown> | null;
   ip: string;
   user_agent: string;
+}
+
+export interface FilterParams {
+  fechaInicio?: string;
+  fechaFin?: string;
+  accion?: string;
+  usuario?: string;
+  registro_id?: string;
 }
 
 export interface AuditTableProps {
@@ -214,12 +229,4 @@ export interface AuditTableProps {
 export interface AuditFiltersProps {
   onFilterChange: (filters: FilterParams) => void;
   loading?: boolean;
-}
-
-export interface FilterParams {
-  fechaInicio?: string;
-  fechaFin?: string;
-  accion?: string;
-  usuario?: string;
-  registro_id?: string;
 }

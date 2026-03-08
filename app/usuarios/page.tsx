@@ -1,26 +1,48 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Usuario, UsuarioFormData, UsuarioEditData } from "../components/usuarios/types";
+import {
+  Usuario,
+  UsuarioFormData,
+  UsuarioEditData,
+} from "../components/usuarios/types";
 import UsuarioTable from "../components/usuarios/UsuarioTable";
 import UsuarioForm from "../components/usuarios/UsuarioForm";
 import UsuarioEditForm from "../components/usuarios/UsuarioEditForm";
-import CambiarPasswordForm from "../components/usuarios/CambiarPasswordForm"; // 👈 NUEVO
+import CambiarPasswordForm from "../components/usuarios/CambiarPasswordForm";
+
+export const dynamic = "force-dynamic";
+
+/* ✅ Tipo explícito para cambio de contraseña */
+interface ChangePasswordData {
+  currentPassword?: string; // opcional si es admin
+  newPassword: string;
+  confirmPassword: string;
+}
+
+/* ✅ Tipo para respuestas API */
+interface ApiResponse {
+  message?: string;
+  error?: string;
+}
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false); // 👈 NUEVO
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [usuarioToEdit, setUsuarioToEdit] = useState<Usuario | null>(null);
-  const [usuarioToChangePassword, setUsuarioToChangePassword] = useState<Usuario | null>(null); // 👈 NUEVO
+  const [usuarioToChangePassword, setUsuarioToChangePassword] =
+    useState<Usuario | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [error, setError] = useState("");
 
+  /* ✅ Carga centralizada (sin duplicación) */
   async function loadUsuarios() {
     try {
       setLoading(true);
+
       const res = await fetch("/api/usuarios", {
         credentials: "include",
       });
@@ -29,7 +51,7 @@ export default function UsuariosPage() {
         throw new Error("Error al cargar usuarios");
       }
 
-      const data = await res.json();
+      const data: Usuario[] = await res.json();
       setUsuarios(data);
       setError("");
     } catch (err) {
@@ -41,37 +63,12 @@ export default function UsuariosPage() {
   }
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function fetchUsuarios() {
-      try {
-        const res = await fetch("/api/usuarios", {
-          credentials: "include",
-        });
-        const data = await res.json();
-
-        if (isMounted) {
-          setUsuarios(data);
-        }
-      } catch (err) {
-        console.error(err);
-        if (isMounted) {
-          setError("Error al cargar usuarios");
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    fetchUsuarios();
-
-    return () => {
-      isMounted = false;
-    };
+    loadUsuarios();
   }, []);
 
+  /* ============================= */
+  /* CREAR USUARIO */
+  /* ============================= */
   async function handleCreateUser(formData: UsuarioFormData) {
     setFormLoading(true);
     try {
@@ -83,7 +80,7 @@ export default function UsuariosPage() {
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data: ApiResponse = await res.json();
 
       if (!res.ok) {
         throw new Error(data.error || "Error al crear usuario");
@@ -98,7 +95,13 @@ export default function UsuariosPage() {
     }
   }
 
-  async function handleEditUser(id: string, data: Partial<UsuarioEditData>) {
+  /* ============================= */
+  /* EDITAR USUARIO */
+  /* ============================= */
+  async function handleEditUser(
+    id: string,
+    data: Partial<UsuarioEditData>
+  ) {
     setFormLoading(true);
     try {
       const res = await fetch(`/api/usuarios/${id}`, {
@@ -109,7 +112,7 @@ export default function UsuariosPage() {
         body: JSON.stringify(data),
       });
 
-      const result = await res.json();
+      const result: ApiResponse = await res.json();
 
       if (!res.ok) {
         throw new Error(result.error || "Error al actualizar usuario");
@@ -126,8 +129,13 @@ export default function UsuariosPage() {
     }
   }
 
-  // 👇 NUEVO: Cambiar contraseña
-  async function handleChangePassword(userId: string, data: any) {
+  /* ============================= */
+  /* CAMBIAR CONTRASEÑA */
+  /* ============================= */
+  async function handleChangePassword(
+    userId: string,
+    data: ChangePasswordData
+  ) {
     setFormLoading(true);
     try {
       const res = await fetch(`/api/usuarios/${userId}/password`, {
@@ -138,7 +146,7 @@ export default function UsuariosPage() {
         body: JSON.stringify(data),
       });
 
-      const result = await res.json();
+      const result: ApiResponse = await res.json();
 
       if (!res.ok) {
         throw new Error(result.error || "Error al cambiar contraseña");
@@ -159,7 +167,6 @@ export default function UsuariosPage() {
     setEditModalOpen(true);
   };
 
-  // 👇 NUEVO
   const handleChangePasswordClick = (usuario: Usuario) => {
     setUsuarioToChangePassword(usuario);
     setPasswordModalOpen(true);
@@ -170,15 +177,27 @@ export default function UsuariosPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Usuarios</h1>
-          <p className="text-gray-600 mt-1">Gestiona los usuarios del sistema</p>
+          <p className="text-gray-600 mt-1">
+            Gestiona los usuarios del sistema
+          </p>
         </div>
-        
+
         <button
           onClick={() => setModalOpen(true)}
           className="bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800 transition flex items-center gap-2 shadow-lg"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
           </svg>
           Nuevo Usuario
         </button>
@@ -190,12 +209,12 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      <UsuarioTable 
-        usuarios={usuarios} 
-        loading={loading} 
+      <UsuarioTable
+        usuarios={usuarios}
+        loading={loading}
         onRefresh={loadUsuarios}
         onEdit={handleEditClick}
-        onChangePassword={handleChangePasswordClick} // 👈 NUEVO
+        onChangePassword={handleChangePasswordClick}
       />
 
       <UsuarioForm
@@ -216,7 +235,6 @@ export default function UsuariosPage() {
         loading={formLoading}
       />
 
-      {/* 👇 NUEVO: Modal de cambio de contraseña */}
       <CambiarPasswordForm
         isOpen={passwordModalOpen}
         onClose={() => {
