@@ -5,7 +5,6 @@ import { Transaccion } from "../components/pagos/types";
 import PagoTable from "../components/pagos/PagoTable";
 import PagoDetalle from "../components/pagos/PagoDetalle";
 
-
 export default function PagosPage() {
   const [transacciones, setTransacciones] = useState<Transaccion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +18,14 @@ export default function PagosPage() {
     montoTotal: 0
   });
 
+// Función para formatear el monto total (con validación completa)
+const formatMontoTotal = (monto: number | string | null | undefined): string => {
+  if (monto === null || monto === undefined) return '$0.00';
+  
+  const numero = typeof monto === 'number' ? monto : parseFloat(monto) || 0;
+  return `$${numero.toFixed(2)}`;
+};
+
   async function loadTransacciones() {
     try {
       setLoading(true);
@@ -29,9 +36,15 @@ export default function PagosPage() {
       
       const completados = data.filter((t: Transaccion) => t.estado === 'COMPLETADO').length;
       const pendientes = data.filter((t: Transaccion) => t.estado === 'PENDIENTE').length;
+      
+      // CORREGIDO: Convertir monto a número si viene como string
       const montoTotal = data
         .filter((t: Transaccion) => t.estado === 'COMPLETADO')
-        .reduce((sum: number, t: Transaccion) => sum + (t.monto || 0), 0);
+        .reduce((sum: number, t: Transaccion) => {
+          // Asegurar que monto sea número
+          const monto = typeof t.monto === 'string' ? parseFloat(t.monto) : (t.monto || 0);
+          return sum + monto;
+        }, 0);
       
       setStats({ total: data.length, completados, pendientes, montoTotal });
       setError("");
@@ -117,7 +130,8 @@ export default function PagosPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Monto Total</p>
-              <p className="text-2xl font-bold text-purple-600">${stats.montoTotal.toFixed(2)}</p>
+              {/* CORREGIDO: Usar la función formatMontoTotal */}
+              <p className="text-2xl font-bold text-purple-600">{formatMontoTotal(stats.montoTotal)}</p>
             </div>
           </div>
         </div>

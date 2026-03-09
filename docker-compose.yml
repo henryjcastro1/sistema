@@ -1,5 +1,4 @@
 services:
-
   db:
     image: postgres:16
     container_name: demo1_db
@@ -10,7 +9,7 @@ services:
       POSTGRES_PASSWORD: 12345
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql  # 👈 AUTO INIT
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   app:
     build: .
@@ -23,8 +22,9 @@ services:
       DB_PASSWORD: 12345
       DB_HOST: db
       DB_NAME: demo1
-      JWT_SECRET: supersecreto123   # 👈 AGREGAR ESTO
-
+      JWT_SECRET: supersecreto123
+    volumes:  # 👈 EL VOLUMEN VA AQUÍ, en app, NO en db
+      - ./public/uploads:/app/public/uploads
     depends_on:
       - db
 

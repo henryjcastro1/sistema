@@ -18,8 +18,10 @@ export interface Transaccion {
   monto: number;
   estado: 'PENDIENTE' | 'PROCESANDO' | 'COMPLETADO' | 'FALLIDO' | 'REEMBOLSADO' | 'CANCELADO' | 'RECHAZADO';
   referencia_externa?: string;
-  respuesta_completa?: any;
+  respuesta_completa?: unknown;
   created_at: string;
+  updated_at?: string; 
+
   
   // ✅ NUEVOS CAMPOS - estos son los que faltan
   tipo_pago?: 'TARJETA' | 'TRANSFERENCIA' | 'EFECTIVO';

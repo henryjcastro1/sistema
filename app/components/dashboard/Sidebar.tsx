@@ -29,10 +29,11 @@ export default function Sidebar() {
     { label: "Productos", href: "/productos", icon: Package },
     { label: "Pedidos", href: "/pedidos", icon: ShoppingCart },
     { label: "Servicios", href: "/servicios", icon: Shield },
+    { label: "Pagos", href: "/pagos", icon: CreditCard  },
+
   ];
 
   const configItems = [
-    { label: "Auditoría - Usuarios", href: "/config/usuarios", icon: FileText },
     { label: "Monedas", href: "/config/monedas", icon: CreditCard },
     { label: "Auditoría - General", href: "/config/auditoria/", icon: BarChart3 },
   ];

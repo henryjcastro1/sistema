@@ -3,6 +3,13 @@ import type { NextRequest } from "next/server";
 import { pool } from "@/lib/bd";
 import jwt from "jsonwebtoken";
 
+// Definir interfaz para el payload del token
+interface TokenPayload {
+  id: string;
+  email: string;
+  rol?: string;
+}
+
 // PATCH /api/pagos/[id] - Verificar un pago (aprobar/rechazar)
 export async function PATCH(
   request: NextRequest,
@@ -40,24 +47,28 @@ export async function PATCH(
       );
     }
 
-    let adminId;
+    let adminId: string;
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      // 👇 CORREGIDO: Usar TokenPayload en lugar de any
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as TokenPayload;
       adminId = decoded.id;
       
-      // Verificar que el usuario es admin (opcional - puedes agregar esta lógica)
+      // Verificar que el usuario es admin
       const userResult = await pool.query(
-        `SELECT rol_id FROM usuarios WHERE id = $1`,
+        `SELECT r.nombre as rol_nombre 
+         FROM usuarios u
+         JOIN roles r ON u.rol_id = r.id
+         WHERE u.id = $1`,
         [adminId]
       );
-      
-      // Aquí puedes verificar si el rol es ADMIN o SUPERADMIN
-      // if (userResult.rows[0].rol_id !== 'id-del-rol-admin') {
-      //   return NextResponse.json(
-      //     { error: "No tienes permisos para verificar pagos" },
-      //     { status: 403 }
-      //   );
-      // }
+
+      const rol = userResult.rows[0]?.rol_nombre;
+      if (!rol || !['ADMIN', 'SUPERADMIN'].includes(rol)) {
+        return NextResponse.json(
+          { error: "No tienes permisos de administrador" },
+          { status: 403 }
+        );
+      }
       
     } catch (e) {
       return NextResponse.json(
@@ -134,12 +145,6 @@ export async function PATCH(
            WHERE id = $1`,
           [transaccion.pedido_id]
         );
-
-        // Opcional: Enviar notificación al cliente
-        // await enviarNotificacionPagoExitoso(transaccion.usuario_id, transaccion.pedido_id);
-      } else {
-        // Si fue rechazado, opcionalmente notificar al cliente
-        // await enviarNotificacionPagoRechazado(transaccion.usuario_id, transaccion.pedido_id, motivo_rechazo);
       }
 
       // Registrar en auditoría
@@ -183,7 +188,7 @@ export async function PATCH(
   }
 }
 
-// GET /api/pagos/[id] - Obtener una transacción específica (opcional)
+// GET /api/pagos/[id] - Obtener una transacción específica
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

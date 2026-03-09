@@ -9,6 +9,7 @@ import { cookies } from 'next/headers';
 // Configuración para subida de archivos
 const UPLOAD_DIR = path.join(process.cwd(), "public/uploads/comprobantes");
 
+// POST - Crear una nueva transacción de pago
 export async function POST(req: Request) {
   try {
     
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     if (token) {
       try {
         interface JwtPayload {
-          id: number;
+          id: string;
           email: string;
         }
 
@@ -70,6 +71,22 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
+    // VERIFICAR SI EL USUARIO ES ADMIN
+    // =====================================================
+    const userResult = await pool.query(
+      `SELECT r.nombre as rol_nombre 
+       FROM usuarios u
+       JOIN roles r ON u.rol_id = r.id
+       WHERE u.id = $1`,
+      [usuarioId]
+    );
+
+    const esAdmin = userResult.rows[0]?.rol_nombre === 'ADMIN' || 
+                    userResult.rows[0]?.rol_nombre === 'SUPERADMIN';
+
+    console.log("👤 Usuario autenticado:", { usuarioId, esAdmin });
+
+    // =====================================================
     // 2. PROCESAR FORM DATA
     // =====================================================
     const formData = await req.formData();
@@ -85,6 +102,7 @@ export async function POST(req: Request) {
       tipo_pago,
       metodo_pago_id,
       usuarioId,
+      esAdmin,
       tiene_comprobante: !!comprobante
     });
 
@@ -121,25 +139,86 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // 3. VERIFICAR PEDIDO
+    // 3. VERIFICAR PEDIDO (con soporte para admin)
     // =====================================================
-    const pedidoResult = await pool.query(
-      `SELECT p.id, p.total_final, p.estado 
-       FROM pedidos p 
-       WHERE p.id = $1 AND p.usuario_id = $2 AND p.deleted_at IS NULL`,
-      [pedido_id, usuarioId]
-    );
+    let pedidoQuery;
+    let pedidoValues;
+
+    if (esAdmin) {
+      // Admin puede ver cualquier pedido
+      pedidoQuery = `SELECT p.id, p.total_final, p.estado, p.usuario_id 
+                     FROM pedidos p 
+                     WHERE p.id = $1 AND p.deleted_at IS NULL`;
+      pedidoValues = [pedido_id];
+    } else {
+      // Usuario normal solo puede ver sus pedidos
+      pedidoQuery = `SELECT p.id, p.total_final, p.estado, p.usuario_id 
+                     FROM pedidos p 
+                     WHERE p.id = $1 AND p.usuario_id = $2 AND p.deleted_at IS NULL`;
+      pedidoValues = [pedido_id, usuarioId];
+    }
+
+    console.log("🔍 Verificando pedido:", { pedido_id, usuarioId, esAdmin });
+
+    const pedidoResult = await pool.query(pedidoQuery, pedidoValues);
 
     if (pedidoResult.rows.length === 0) {
+      console.log("❌ Pedido no encontrado en BD");
+      return NextResponse.json(
+        { error: "Pedido no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const pedido = pedidoResult.rows[0];
+    console.log("📊 Pedido encontrado:", pedido);
+
+    // =====================================================
+    // 4. VERIFICAR QUE NO HAYA PAGOS DUPLICADOS
+    // =====================================================
+    const pagoExistente = await pool.query(
+      `SELECT id, estado 
+       FROM transacciones 
+       WHERE pedido_id = $1 
+       AND estado IN ('COMPLETADO', 'PENDIENTE', 'PROCESANDO')
+       LIMIT 1`,
+      [pedido_id]
+    );
+
+    if (pagoExistente.rows.length > 0) {
+      const estadoPago = pagoExistente.rows[0].estado;
+      let mensaje = "Este pedido ya tiene un pago registrado";
+      
+      if (estadoPago === 'COMPLETADO') {
+        mensaje = "❌ Este pedido ya está pagado";
+      } else if (estadoPago === 'PENDIENTE') {
+        mensaje = "⏳ Ya hay un pago pendiente de verificación para este pedido";
+      } else if (estadoPago === 'PROCESANDO') {
+        mensaje = "🔄 Ya hay un pago en proceso para este pedido";
+      }
+      
+      console.log("🚫 Pago duplicado detectado:", { 
+        pedido_id, 
+        pago_existente_id: pagoExistente.rows[0].id,
+        estado: estadoPago 
+      });
+      
+      return NextResponse.json(
+        { error: mensaje },
+        { status: 400 }
+      );
+    }
+
+    // Si no es admin, verificar que el pedido pertenece al usuario
+    if (!esAdmin && pedido.usuario_id !== usuarioId) {
+      console.log("❌ El pedido no pertenece al usuario");
       return NextResponse.json(
         { error: "Pedido no encontrado o no te pertenece" },
         { status: 404 }
       );
     }
 
-    const pedido = pedidoResult.rows[0];
-
-    // Verificar que el pedido no esté ya pagado
+    // Verificar que el pedido no esté ya pagado por estado
     if (pedido.estado === 'PAGADO') {
       return NextResponse.json(
         { error: "Este pedido ya está pagado" },
@@ -148,7 +227,7 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // 4. PROCESAR COMPROBANTE (si es transferencia)
+    // 5. PROCESAR COMPROBANTE (si es transferencia)
     // =====================================================
     let comprobante_url = null;
     if (tipo_pago === 'TRANSFERENCIA') {
@@ -202,7 +281,7 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // 5. CREAR TRANSACCIÓN
+    // 6. CREAR TRANSACCIÓN
     // =====================================================
     const estadoInicial = tipo_pago === 'TARJETA' ? 'PROCESANDO' : 'PENDIENTE';
     
@@ -234,7 +313,7 @@ export async function POST(req: Request) {
     console.log("✅ Transacción creada:", nuevaTransaccion.id);
 
     // =====================================================
-    // 6. AUDITORÍA
+    // 7. AUDITORÍA
     // =====================================================
     const rawIp = req.headers.get('x-forwarded-for');
     const ip = rawIp ? rawIp.split(',')[0].trim() : '0.0.0.0';
@@ -259,7 +338,7 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // 7. RESPUESTA EXITOSA
+    // 8. RESPUESTA EXITOSA
     // =====================================================
     const mensaje = tipo_pago === 'TARJETA' 
       ? "Pago procesándose correctamente" 
@@ -287,12 +366,12 @@ export async function POST(req: Request) {
   }
 }
 
-// GET existente (listar transacciones)
+// GET - Listar transacciones
 export async function GET(req: Request) {
   try {
     // Verificar autenticación para GET también
-      const cookieStore = await cookies();
-      const token = cookieStore.get('token')?.value;
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
     
     if (!token) {
       return NextResponse.json(

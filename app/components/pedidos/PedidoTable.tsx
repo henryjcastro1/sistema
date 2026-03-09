@@ -1,19 +1,17 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { PedidoTableProps, Pedido } from "./types";
+import { PedidoTableProps } from "./types";
 import { ToastContainer, useToast } from "../usuarios/Toast";
 
 export default function PedidoTable({ 
   pedidos, 
   loading, 
-  onRefresh, 
   onEdit,
   onView,
-  onDelete,
-  onPagar // 👈 NUEVO: Añadir esta prop
+  onPagar
 }: PedidoTableProps) {
-  const [accionLoading, setAccionLoading] = useState<string | null>(null);
+  const [accionLoading] = useState<string | null>(null);
   const { toasts, showToast, removeToast } = useToast();
   
   // Estados para búsqueda y filtros
@@ -43,6 +41,12 @@ export default function PedidoTable({
     }
   };
 
+  // ✅ SOLUCIÓN: Calcular las fechas límite fuera del useMemo
+  const hoy = new Date();
+  const hoyDateString = hoy.toDateString();
+  const semanaLimite = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const mesLimite = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000);
+
   // Filtrar pedidos
   const filteredPedidos = useMemo(() => {
     return pedidos.filter(p => {
@@ -53,14 +57,15 @@ export default function PedidoTable({
 
       const matchesEstado = filterEstado === "TODOS" || p.estado === filterEstado;
 
+      const fechaPedido = new Date(p.created_at);
       const matchesFecha = filterFecha === "TODOS" || 
-        (filterFecha === "HOY" && new Date(p.created_at).toDateString() === new Date().toDateString()) ||
-        (filterFecha === "SEMANA" && new Date(p.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) ||
-        (filterFecha === "MES" && new Date(p.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+        (filterFecha === "HOY" && fechaPedido.toDateString() === hoyDateString) ||
+        (filterFecha === "SEMANA" && fechaPedido > semanaLimite) ||
+        (filterFecha === "MES" && fechaPedido > mesLimite);
 
       return matchesSearch && matchesEstado && matchesFecha;
     });
-  }, [pedidos, searchTerm, filterEstado, filterFecha]);
+  }, [pedidos, searchTerm, filterEstado, filterFecha, hoyDateString, semanaLimite, mesLimite]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
@@ -206,7 +211,7 @@ export default function PedidoTable({
                             </svg>
                           </button>
 
-                          {/* 👇 NUEVO BOTÓN DE PAGO (solo para pedidos pendientes) */}
+                          {/* Botón de pago (solo para pedidos pendientes) */}
                           {p.estado === 'PENDIENTE' && (
                             <button
                               onClick={() => onPagar?.(p)}
