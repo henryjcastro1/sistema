@@ -63,6 +63,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Después de verificar la contraseña, antes de crear el token
+if (user.rol_nombre === 'CLIENTE') {
+  return NextResponse.json(
+    { error: "Acceso no autorizado. Esta área es solo para administradores." },
+    { status: 403 }
+  );
+}
+
     // Actualizar último login
     await pool.query(
       `UPDATE usuarios 

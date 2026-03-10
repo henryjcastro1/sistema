@@ -7,6 +7,8 @@ import PedidoForm from "../components/pedidos/PedidoForm";
 import PedidoEditForm from "../components/pedidos/PedidoEditForm";
 import PedidoDetalle from "../components/pedidos/PedidoDetalle";
 import PagoClienteForm from "../components/pagos/PagoClienteForm";
+import CambiarEstadoPedido from "../components/pedidos/CambiarEstadoPedido"; // 👈 IMPORTAR
+import { ToastContainer, useToast } from "../components/usuarios/Toast"; // 👈 IMPORTAR PARA TOASTS
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -14,12 +16,16 @@ export default function PedidosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [detalleModalOpen, setDetalleModalOpen] = useState(false);
-  const [pagoModalOpen, setPagoModalOpen] = useState(false); // 👈 NUEVO
+  const [pagoModalOpen, setPagoModalOpen] = useState(false);
+  const [cambiarEstadoOpen, setCambiarEstadoOpen] = useState(false); // 👈 NUEVO ESTADO
   const [pedidoToEdit, setPedidoToEdit] = useState<Pedido | null>(null);
   const [pedidoToView, setPedidoToView] = useState<Pedido | null>(null);
-  const [pedidoToPay, setPedidoToPay] = useState<Pedido | null>(null); // 👈 NUEVO
+  const [pedidoToPay, setPedidoToPay] = useState<Pedido | null>(null);
+  const [pedidoToChangeStatus, setPedidoToChangeStatus] = useState<Pedido | null>(null); // 👈 NUEVO ESTADO
   const [formLoading, setFormLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const { toasts, showToast, removeToast } = useToast(); // 👈 PARA TOASTS
 
   async function loadPedidos() {
     try {
@@ -111,17 +117,44 @@ export default function PedidosPage() {
     setDetalleModalOpen(true);
   };
 
-  // 👇 NUEVO: Función para abrir modal de pago
+  // Función para abrir modal de pago
   const handlePagarClick = (pedido: Pedido) => {
     setPedidoToPay(pedido);
     setPagoModalOpen(true);
   };
 
-  // 👇 NUEVO: Función cuando el pago es exitoso
+  // Función cuando el pago es exitoso
   const handlePagoSuccess = () => {
     setPagoModalOpen(false);
     setPedidoToPay(null);
-    loadPedidos(); // Recargar para ver el nuevo estado
+    loadPedidos();
+  };
+
+  // 👇 NUEVA: Función para abrir modal de cambio de estado
+  const handleCambiarEstadoClick = (pedido: Pedido) => {
+    setPedidoToChangeStatus(pedido);
+    setCambiarEstadoOpen(true);
+  };
+
+  // 👇 NUEVA: Función para cambiar el estado del pedido
+  const handleCambiarEstado = async (pedidoId: string, nuevoEstado: string) => {
+    try {
+      const res = await fetch(`/api/pedidos/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: nuevoEstado }),
+        credentials: 'include'
+      });
+
+      if (!res.ok) throw new Error('Error al cambiar estado');
+      
+      showToast(`✅ Pedido ${nuevoEstado.toLowerCase()} correctamente`, 'success');
+      setCambiarEstadoOpen(false);
+      setPedidoToChangeStatus(null);
+      loadPedidos();
+    } catch (error) {
+      showToast('Error al cambiar estado', 'error');
+    }
   };
 
   return (
@@ -155,7 +188,8 @@ export default function PedidosPage() {
         onRefresh={loadPedidos}
         onEdit={handleEditClick}
         onView={handleViewClick}
-        onPagar={handlePagarClick} // 👈 PASAR LA FUNCIÓN
+        onPagar={handlePagarClick} 
+        onCambiarEstado={handleCambiarEstadoClick}
       />
 
       {/* Modal de creación */}
@@ -188,23 +222,37 @@ export default function PedidosPage() {
         pedido={pedidoToView}
       />
 
-      {/* 👇 NUEVO: Modal de pago */}
+      {/* Modal de pago */}
       {pagoModalOpen && pedidoToPay && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-8">
           <div className="w-full max-w-2xl">
             <PagoClienteForm
-  pedidoId={pedidoToPay.id}
-  monto={Number(pedidoToPay.total_final)}  // 👈 Convertir a número
-  numeroPedido={pedidoToPay.numero_pedido}
-  onSuccess={handlePagoSuccess}
-  onCancel={() => {
-    setPagoModalOpen(false);
-    setPedidoToPay(null);
-  }}
-/>
+              pedidoId={pedidoToPay.id}
+              monto={Number(pedidoToPay.total_final)}
+              numeroPedido={pedidoToPay.numero_pedido}
+              onSuccess={handlePagoSuccess}
+              onCancel={() => {
+                setPagoModalOpen(false);
+                setPedidoToPay(null);
+              }}
+            />
           </div>
         </div>
       )}
+
+      {/* 👇 NUEVO: Modal de cambio de estado */}
+      <CambiarEstadoPedido
+        isOpen={cambiarEstadoOpen}
+        onClose={() => {
+          setCambiarEstadoOpen(false);
+          setPedidoToChangeStatus(null);
+        }}
+        pedido={pedidoToChangeStatus}
+        onCambiarEstado={handleCambiarEstado}
+      />
+
+      {/* ToastContainer para notificaciones */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

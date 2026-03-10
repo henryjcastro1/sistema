@@ -7,9 +7,11 @@ import { ToastContainer, useToast } from "../usuarios/Toast";
 export default function PedidoTable({ 
   pedidos, 
   loading, 
+  onRefresh,
   onEdit,
   onView,
-  onPagar
+  onPagar,
+  onCambiarEstado  // 👈 AGREGADO
 }: PedidoTableProps) {
   const [accionLoading] = useState<string | null>(null);
   const { toasts, showToast, removeToast } = useToast();
@@ -41,7 +43,7 @@ export default function PedidoTable({
     }
   };
 
-  // ✅ SOLUCIÓN: Calcular las fechas límite fuera del useMemo
+  // Calcular las fechas límite fuera del useMemo
   const hoy = new Date();
   const hoyDateString = hoy.toDateString();
   const semanaLimite = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -226,6 +228,19 @@ export default function PedidoTable({
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                 </svg>
                               )}
+                            </button>
+                          )}
+
+                          {/* Botón para cambiar estado (solo para pedidos pagados o enviados) */}
+                          {(p.estado === 'PAGADO' || p.estado === 'ENVIADO') && (
+                            <button
+                              onClick={() => onCambiarEstado?.(p)}
+                              className="p-2.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-all group relative border border-purple-200 hover:border-purple-300"
+                              title="Cambiar estado de envío"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                              </svg>
                             </button>
                           )}
 

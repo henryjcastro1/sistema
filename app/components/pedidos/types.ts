@@ -85,6 +85,7 @@ export interface PedidoTableProps {
   onView?: (pedido: Pedido) => void;
   onDelete?: (pedido: Pedido) => void;
   onPagar?: (pedido: Pedido) => void; 
+  onCambiarEstado?: (pedido: Pedido) => void
 }
 
 export interface PedidoDetalleProps {
