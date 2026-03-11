@@ -15,14 +15,20 @@ export async function GET() {
         created_at,
         updated_at
       FROM monedas 
-      WHERE deleted_at IS NULL  -- 👈 QUITAMOS el filtro de activo para ver todas
+      WHERE deleted_at IS NULL
       ORDER BY 
         CASE WHEN es_base THEN 0 ELSE 1 END,
-        activo DESC,  -- 👈 Primero las activas, luego las inactivas
+        activo DESC,
         codigo
     `);
 
-    return NextResponse.json(result.rows);
+    // 👇 FORZAR UTF-8 EN LA RESPUESTA
+    return new NextResponse(JSON.stringify(result.rows), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    });
 
   } catch (error) {
     console.error("Error GET monedas:", error);
@@ -33,6 +39,7 @@ export async function GET() {
   }
 }
 
+// El resto de las funciones (POST, PUT, DELETE) quedan igual
 export async function POST(req: Request) {
   try {
     const { codigo, nombre, simbolo, tasa_cambio, es_base = false } = await req.json();

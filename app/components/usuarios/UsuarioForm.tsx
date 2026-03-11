@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { UsuarioFormData, UsuarioFormProps } from "./types";
 
 const ROLES = [
@@ -22,14 +22,53 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
   const [error, setError] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // 👈 Estado para mostrar/ocultar password
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState(""); // 👈 NUEVO
+  const [verificandoEmail, setVerificandoEmail] = useState(false); // 👈 NUEVO
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Resetear estados cuando se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
+      setEmailError("");
+      setVerificandoEmail(false);
+    }
+  }, [isOpen]);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // 👇 NUEVA FUNCIÓN: Verificar email duplicado
+  const verificarEmail = async (email: string) => {
+    if (!email || !emailRegex.test(email)) {
+      setEmailError("");
+      return false;
+    }
+
+    setVerificandoEmail(true);
+    try {
+      const res = await fetch(`/api/usuarios/verificar-email?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      
+      if (data.existe) {
+        setEmailError("❌ Este email ya está registrado");
+        return false;
+      } else {
+        setEmailError("");
+        return true;
+      }
+    } catch (error) {
+      console.error("Error verificando email:", error);
+      setEmailError("Error al verificar email");
+      return false;
+    } finally {
+      setVerificandoEmail(false);
+    }
+  };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validaciones
     if (!file.type.startsWith('image/')) {
       setError('Por favor selecciona una imagen válida');
       return;
@@ -39,14 +78,12 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
       return;
     }
 
-    // Mostrar preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setPreviewImage(reader.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Convertir a Base64 para enviar
     setUploading(true);
     try {
       const base64 = await new Promise<string>((resolve) => {
@@ -55,13 +92,8 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
         reader.readAsDataURL(file);
       });
 
-      console.log("📸 Imagen convertida a Base64 (primeros 100 chars):", base64.substring(0, 100) + "...");
-      console.log("📏 Longitud total:", base64.length);
-      
-      // Guardar el Base64 directamente en el formulario
       setForm({ ...form, foto_url: base64 });
       setError("");
-      
     } catch (err) {
       console.error("❌ Error procesando imagen:", err);
       setError("Error procesando la imagen");
@@ -75,7 +107,7 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
     e.preventDefault();
     setError("");
 
-    // Validaciones
+    // Validaciones básicas
     if (!form.nombre || !form.apellido || !form.email || !form.password) {
       setError("Nombre, apellido, email y password son obligatorios");
       return;
@@ -86,14 +118,18 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) {
       setError("Email inválido");
       return;
     }
 
+    // 👇 VALIDAR EMAIL DUPLICADO ANTES DE ENVIAR
+    const emailValido = await verificarEmail(form.email);
+    if (!emailValido) {
+      return; // No enviar si el email ya existe
+    }
+
     try {
-      console.log("📤 Enviando formulario con foto:", form.foto_url ? "SÍ" : "NO");
       await onSubmit(form);
       
       // Resetear formulario
@@ -107,6 +143,7 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
         foto_url: "",
       });
       setPreviewImage(null);
+      setEmailError("");
       setError("");
       onClose();
     } catch (err) {
@@ -200,15 +237,33 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
             />
           </div>
 
-          {/* Email */}
-          <input 
-            placeholder="Email" 
-            type="email" 
-            className="w-full p-3 border rounded-lg" 
-            value={form.email} 
-            onChange={(e) => setForm({ ...form, email: e.target.value })} 
-            required 
-          />
+          {/* Email con validación en tiempo real */}
+          <div>
+            <input 
+              placeholder="Email" 
+              type="email" 
+              className={`w-full p-3 border rounded-lg ${emailError ? 'border-red-500' : ''}`} 
+              value={form.email} 
+              onChange={(e) => {
+                setForm({ ...form, email: e.target.value });
+                setEmailError(""); // Limpiar error mientras escribe
+              }}
+              onBlur={() => verificarEmail(form.email)} // 👈 Verificar al perder el foco
+              required 
+            />
+            {verificandoEmail && (
+              <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                <span className="animate-spin border-2 border-gray-500 border-t-transparent rounded-full w-3 h-3 inline-block"></span>
+                Verificando email...
+              </p>
+            )}
+            {emailError && !verificandoEmail && (
+              <p className="text-sm text-red-600 mt-1">{emailError}</p>
+            )}
+            {!emailError && form.email && emailRegex.test(form.email) && !verificandoEmail && (
+              <p className="text-sm text-green-600 mt-1">✅ Email disponible</p>
+            )}
+          </div>
           
           {/* Teléfono */}
           <input 
@@ -218,7 +273,7 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
             onChange={(e) => setForm({ ...form, telefono: e.target.value })} 
           />
           
-          {/* 👁️ Password con ojo */}
+          {/* Password con ojo */}
           <div className="relative">
             <input 
               type={showPassword ? "text" : "password"}
@@ -271,7 +326,7 @@ export default function UsuarioForm({ isOpen, onClose, onSubmit, loading }: Usua
             </button>
             <button 
               type="submit" 
-              disabled={loading || uploading} 
+              disabled={loading || uploading || verificandoEmail || !!emailError} // 👈 Deshabilitar si hay error de email
               className="flex-1 bg-black text-white p-3 rounded-lg hover:bg-gray-800 disabled:opacity-50"
             >
               {loading ? 'Creando...' : uploading ? 'Procesando imagen...' : 'Crear Usuario'}

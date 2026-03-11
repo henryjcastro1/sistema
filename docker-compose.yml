@@ -23,6 +23,8 @@ services:
       DB_HOST: db
       DB_NAME: demo1
       JWT_SECRET: supersecreto123
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: "u5qJGptT8xNbZiG1ma1hjxz+MWVT2CBIT1IyvJVQY9I="  # 👈 AGREGAR
+
     volumes:  # 👈 EL VOLUMEN VA AQUÍ, en app, NO en db
       - ./public/uploads:/app/public/uploads
     depends_on:

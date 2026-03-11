@@ -11,8 +11,8 @@ export default function ServicioTable({
   onView,
   onEdit,
   onAsignar,
-  onTomar,           // 👈 NUEVA PROP
-  onCompletar,       // 👈 NUEVA PROP
+  onTomar,
+  onCompletar,
   onCancelar,
   esAdmin = false,
   esTecnico = false
@@ -23,6 +23,12 @@ export default function ServicioTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState<string>("TODOS");
   const [filterPrioridad, setFilterPrioridad] = useState<string>("TODOS");
+  
+  // 👇 NUEVOS ESTADOS PARA RANGO DE FECHAS
+  const [filterFecha, setFilterFecha] = useState<string>("TODOS");
+  const [fechaInicio, setFechaInicio] = useState<string>("");
+  const [fechaFin, setFechaFin] = useState<string>("");
+  const [mostrarCalendarios, setMostrarCalendarios] = useState(false);
 
   const getEstadoColor = (estado: string): string => {
     switch (estado) {
@@ -78,6 +84,20 @@ export default function ServicioTable({
     return 'text-green-600';
   };
 
+  // Calcular fechas límite para filtros predefinidos
+  const hoy = new Date();
+  const hoyDateString = hoy.toDateString();
+  const semanaLimite = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const mesLimite = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  // Función para limpiar filtros de fecha
+  const limpiarFiltrosFecha = () => {
+    setFechaInicio("");
+    setFechaFin("");
+    setFilterFecha("TODOS");
+    setMostrarCalendarios(false);
+  };
+
   // Filtrar servicios
   const filteredServicios = useMemo(() => {
     return servicios.filter(s => {
@@ -90,9 +110,28 @@ export default function ServicioTable({
       const matchesEstado = filterEstado === "TODOS" || s.estado === filterEstado;
       const matchesPrioridad = filterPrioridad === "TODOS" || s.prioridad.toString() === filterPrioridad;
 
-      return matchesSearch && matchesEstado && matchesPrioridad;
+      // Filtro por fecha
+      let matchesFecha = true;
+      const fechaServicio = new Date(s.fecha_solicitado);
+      
+      if (fechaInicio && fechaFin) {
+        const inicio = new Date(fechaInicio);
+        inicio.setHours(0, 0, 0, 0);
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        
+        matchesFecha = fechaServicio >= inicio && fechaServicio <= fin;
+      } else if (filterFecha === "HOY") {
+        matchesFecha = fechaServicio.toDateString() === hoyDateString;
+      } else if (filterFecha === "SEMANA") {
+        matchesFecha = fechaServicio > semanaLimite;
+      } else if (filterFecha === "MES") {
+        matchesFecha = fechaServicio > mesLimite;
+      }
+
+      return matchesSearch && matchesEstado && matchesPrioridad && matchesFecha;
     });
-  }, [servicios, searchTerm, filterEstado, filterPrioridad]);
+  }, [servicios, searchTerm, filterEstado, filterPrioridad, filterFecha, fechaInicio, fechaFin, hoyDateString, semanaLimite, mesLimite]);
 
   const formatCurrency = (value?: number): string => {
     if (!value) return '-';
@@ -112,6 +151,11 @@ export default function ServicioTable({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const formatDateInput = (date: string): string => {
+    if (!date) return '';
+    return new Date(date).toISOString().split('T')[0];
   };
 
   const formatSLA = (servicio: Servicio): string => {
@@ -138,74 +182,162 @@ export default function ServicioTable({
       <div className="bg-white rounded-xl shadow overflow-hidden">
         {/* Barra de búsqueda y filtros */}
         <div className="p-4 border-b bg-gray-50/50">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Buscador */}
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+          <div className="flex flex-col gap-4">
+            {/* Fila superior: filtros principales */}
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Buscador */}
+              <div className="flex-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar por número, título, cliente o técnico..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none transition"
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Buscar por número, título, cliente o técnico..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none transition"
-              />
-            </div>
 
-            {/* Filtro por Estado */}
-            <div className="md:w-44">
-              <select
-                value={filterEstado}
-                onChange={(e) => setFilterEstado(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+              {/* Filtro por Estado */}
+              <div className="md:w-44">
+                <select
+                  value={filterEstado}
+                  onChange={(e) => setFilterEstado(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                >
+                  <option value="TODOS">📋 Todos los estados</option>
+                  <option value="SOLICITADO">🆕 Solicitado</option>
+                  <option value="EN_PROCESO">⚙️ En Proceso</option>
+                  <option value="COMPLETADO">✅ Completado</option>
+                  <option value="CANCELADO">❌ Cancelado</option>
+                </select>
+              </div>
+
+              {/* Filtro por Prioridad */}
+              <div className="md:w-40">
+                <select
+                  value={filterPrioridad}
+                  onChange={(e) => setFilterPrioridad(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                >
+                  <option value="TODOS">🔴 Todas las prioridades</option>
+                  <option value="1">🔴 Crítico (1)</option>
+                  <option value="2">🟠 Alta (2)</option>
+                  <option value="3">🟡 Media (3)</option>
+                  <option value="4">🟢 Baja (4)</option>
+                  <option value="5">🔵 Muy Baja (5)</option>
+                </select>
+              </div>
+
+              {/* Filtro por Fecha */}
+              <div className="md:w-44">
+                <select
+                  value={filterFecha}
+                  onChange={(e) => {
+                    setFilterFecha(e.target.value);
+                    if (e.target.value !== "RANGO") {
+                      setMostrarCalendarios(false);
+                      setFechaInicio("");
+                      setFechaFin("");
+                    } else {
+                      setMostrarCalendarios(true);
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                >
+                  <option value="TODOS">📅 Todas las fechas</option>
+                  <option value="HOY">🟢 Hoy</option>
+                  <option value="SEMANA">📆 Esta semana</option>
+                  <option value="MES">📅 Este mes</option>
+                  <option value="RANGO">🔍 Rango personalizado</option>
+                </select>
+              </div>
+
+              {/* Botón para limpiar filtros */}
+              {(fechaInicio || fechaFin || filterFecha !== "TODOS" || filterEstado !== "TODOS" || filterPrioridad !== "TODOS" || searchTerm) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm("");
+                    setFilterEstado("TODOS");
+                    setFilterPrioridad("TODOS");
+                    limpiarFiltrosFecha();
+                  }}
+                  className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition border border-red-200 hover:border-red-300"
+                >
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Limpiar filtros
+                  </span>
+                </button>
+              )}
+
+              {/* Contador */}
+              <div className="flex items-center text-sm bg-white px-4 py-2 rounded-lg border border-gray-200">
+                <span className="font-medium text-gray-900">{filteredServicios.length}</span>
+                <span className="text-gray-500 ml-1">servicios</span>
+              </div>
+
+              {/* Botón refrescar */}
+              <button
+                onClick={onRefresh}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
               >
-                <option value="TODOS">📋 Todos los estados</option>
-                <option value="SOLICITADO">🆕 Solicitado</option>
-                <option value="EN_PROCESO">⚙️ En Proceso</option>
-                <option value="COMPLETADO">✅ Completado</option>
-                <option value="CANCELADO">❌ Cancelado</option>
-              </select>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refrescar
+              </button>
             </div>
 
-            {/* Filtro por Prioridad */}
-            <div className="md:w-40">
-              <select
-                value={filterPrioridad}
-                onChange={(e) => setFilterPrioridad(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
-              >
-                <option value="TODOS">🔴 Todas las prioridades</option>
-                <option value="1">🔴 Crítico (1)</option>
-                <option value="2">🟠 Alta (2)</option>
-                <option value="3">🟡 Media (3)</option>
-                <option value="4">🟢 Baja (4)</option>
-                <option value="5">🔵 Muy Baja (5)</option>
-              </select>
-            </div>
-
-            {/* Contador */}
-            <div className="flex items-center text-sm bg-white px-4 py-2 rounded-lg border border-gray-200">
-              <span className="font-medium text-gray-900">{filteredServicios.length}</span>
-              <span className="text-gray-500 ml-1">servicios</span>
-            </div>
-
-            {/* Botón refrescar */}
-            <button
-              onClick={onRefresh}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refrescar
-            </button>
+            {/* Fila inferior: calendarios para rango personalizado */}
+            {mostrarCalendarios && (
+              <div className="flex flex-col md:flex-row gap-4 items-end bg-gray-100 p-4 rounded-lg">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Fecha desde
+                  </label>
+                  <input
+                    type="date"
+                    value={formatDateInput(fechaInicio)}
+                    onChange={(e) => {
+                      setFechaInicio(e.target.value);
+                      setFilterFecha("RANGO");
+                    }}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Fecha hasta
+                  </label>
+                  <input
+                    type="date"
+                    value={formatDateInput(fechaFin)}
+                    min={formatDateInput(fechaInicio)}
+                    onChange={(e) => {
+                      setFechaFin(e.target.value);
+                      setFilterFecha("RANGO");
+                    }}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                  />
+                </div>
+                <button
+                  onClick={() => setMostrarCalendarios(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition border border-gray-200"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Tabla */}
+        {/* Tabla (resto del código igual) */}
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-black"></div>
@@ -306,34 +438,31 @@ export default function ServicioTable({
                             </button>
                           )}
 
-                          {/* Tomar servicio (técnico) - CORREGIDO: usa onTomar */}
+                          {/* Tomar servicio (técnico) */}
                           {esTecnico && s.estado === 'SOLICITADO' && !s.tecnico_id && (
-  <button
-    onClick={() => onTomar?.(s)}
-    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-    title="Tomar servicio"
-  >
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  </button>
-)}
+                            <button
+                              onClick={() => onTomar?.(s)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                              title="Tomar servicio"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                          )}
 
-
-                          {/* Completar servicio (técnico) - */}
-{/* Completar servicio (técnico) */}
-{(esTecnico || esAdmin) && s.estado === 'EN_PROCESO' && (
-  <button
-    onClick={() => onCompletar?.(s)}
-    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-    title="Completar servicio"
-  >
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  </button>
-)}
-
+                          {/* Completar servicio */}
+                          {(esTecnico || esAdmin) && s.estado === 'EN_PROCESO' && (
+                            <button
+                              onClick={() => onCompletar?.(s)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                              title="Completar servicio"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          )}
 
                           {/* Cancelar (admin) */}
                           {esAdmin && s.estado !== 'COMPLETADO' && s.estado !== 'CANCELADO' && (
