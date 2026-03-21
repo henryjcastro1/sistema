@@ -33,6 +33,13 @@ class _RegisterScreenState extends State<RegisterScreen>
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Variables para la seguridad de la contraseña
+  bool _hasMinLength = false;
+  bool _hasUpperCase = false;
+  bool _hasLowerCase = false;
+  bool _hasNumber = false;
+  bool _hasSpecialChar = false;
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -57,6 +64,47 @@ class _RegisterScreenState extends State<RegisterScreen>
         );
 
     _animationController.forward();
+
+    // Agregar listener para validar la contraseña en tiempo real
+    _passwordController.addListener(_validatePassword);
+  }
+
+  void _validatePassword() {
+    String password = _passwordController.text;
+    setState(() {
+      _hasMinLength = password.length >= 8;
+      _hasUpperCase = password.contains(RegExp(r'[A-Z]'));
+      _hasLowerCase = password.contains(RegExp(r'[a-z]'));
+      _hasNumber = password.contains(RegExp(r'[0-9]'));
+      _hasSpecialChar = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+    });
+  }
+
+  double _getPasswordStrength() {
+    int strength = 0;
+    if (_hasMinLength) strength++;
+    if (_hasUpperCase) strength++;
+    if (_hasLowerCase) strength++;
+    if (_hasNumber) strength++;
+    if (_hasSpecialChar) strength++;
+
+    return strength / 5; // Devuelve un valor entre 0.0 y 1.0
+  }
+
+  Color _getPasswordStrengthColor() {
+    double strength = _getPasswordStrength();
+    if (strength < 0.4) return Colors.red.shade400;
+    if (strength < 0.7) return Colors.orange.shade400;
+    if (strength < 0.9) return Colors.yellow.shade600;
+    return Colors.green.shade400;
+  }
+
+  String _getPasswordStrengthText() {
+    double strength = _getPasswordStrength();
+    if (strength < 0.4) return 'Débil';
+    if (strength < 0.7) return 'Media';
+    if (strength < 0.9) return 'Buena';
+    return 'Fuerte';
   }
 
   @override
@@ -65,6 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     _apellidoController.dispose();
     _emailController.dispose();
     _telefonoController.dispose();
+    _passwordController.removeListener(_validatePassword);
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _animationController.dispose();
@@ -417,57 +466,143 @@ class _RegisterScreenState extends State<RegisterScreen>
                         keyboardType: TextInputType.phone,
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        style: const TextStyle(color: Colors.white),
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: 'Contraseña',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          floatingLabelStyle: const TextStyle(
-                            color: Colors.white,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.lock_outline,
-                            color: Colors.white70,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: Colors.white70,
+                      // Campo de contraseña con indicador de seguridad
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextFormField(
+                            controller: _passwordController,
+                            style: const TextStyle(color: Colors.white),
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña',
+                              labelStyle: const TextStyle(
+                                color: Colors.white70,
+                              ),
+                              floatingLabelStyle: const TextStyle(
+                                color: Colors.white,
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline,
+                                color: Colors.white70,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.white70,
+                                ),
+                                onPressed: () => setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                }),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide(
+                                  color: _getPasswordStrengthColor(),
+                                ),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: const BorderSide(color: Colors.red),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.05),
                             ),
-                            onPressed: () => setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            }),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Ingresa tu contraseña';
+                              }
+                              if (value.length < 6) {
+                                return 'Mínimo 6 caracteres';
+                              }
+                              return null;
+                            },
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.3),
+                          const SizedBox(height: 8),
+
+                          // Barra de fortaleza de contraseña
+                          if (_passwordController.text.isNotEmpty) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: LinearProgressIndicator(
+                                value: _getPasswordStrength(),
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  _getPasswordStrengthColor(),
+                                ),
+                                minHeight: 6,
+                              ),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            borderSide: const BorderSide(color: Colors.white),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white.withOpacity(0.05),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Ingresa tu contraseña';
-                          }
-                          if (value.length < 6) {
-                            return 'Mínimo 6 caracteres';
-                          }
-                          return null;
-                        },
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Seguridad: ${_getPasswordStrengthText()}',
+                                  style: TextStyle(
+                                    color: _getPasswordStrengthColor(),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '${(_getPasswordStrength() * 100).toInt()}%',
+                                  style: TextStyle(
+                                    color: _getPasswordStrengthColor(),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Requisitos de contraseña con indicadores de color
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildRequirementIndicator(
+                                    'Mínimo 8 caracteres',
+                                    _hasMinLength,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildRequirementIndicator(
+                                    'Una mayúscula',
+                                    _hasUpperCase,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildRequirementIndicator(
+                                    'Una minúscula',
+                                    _hasLowerCase,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildRequirementIndicator(
+                                    'Un número',
+                                    _hasNumber,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildRequirementIndicator(
+                                    'Un carácter especial (!@#\$%^&*)',
+                                    _hasSpecialChar,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -618,6 +753,26 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRequirementIndicator(String text, bool isMet) {
+    return Row(
+      children: [
+        Icon(
+          isMet ? Icons.check_circle : Icons.cancel,
+          size: 18,
+          color: isMet ? Colors.green.shade400 : Colors.red.shade400,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(
+            color: isMet ? Colors.green.shade400 : Colors.red.shade400,
+            fontSize: 12,
+          ),
+        ),
+      ],
     );
   }
 }
