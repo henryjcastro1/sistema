@@ -1,14 +1,24 @@
+// app/api/productos/[id]/route.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { pool } from "@/lib/bd";
 import jwt from "jsonwebtoken";
+import { writeFile, mkdir, unlink } from "fs/promises";
+import { join } from "path";
+import { existsSync } from "fs";
+
+interface TokenPayload {
+  id: string;
+  email: string;
+  rol: string;
+}
 
 interface ProductoUpdateInput {
   nombre?: string;
   descripcion?: string;
   precio?: number;
   stock?: number;
-  imagen_url?: string;
+  imagen_url?: string | File;
   categoria_id?: string;
   subcategoria_id?: string;
   sku?: string;
@@ -17,9 +27,57 @@ interface ProductoUpdateInput {
   modelo?: string;
   garantia_meses?: number;
   peso_kg?: number;
-  dimensiones?: any;
+  dimensiones?: Dimensiones;
   destacado?: boolean;
   activo?: boolean;
+  imagenes_eliminar?: number[];
+}
+
+interface Dimensiones {
+  largo: number;
+  ancho: number;
+  alto: number;
+}
+
+// Función para guardar imagen
+async function guardarImagen(data: File | string, nombre: string, index: number): Promise<string | null> {
+  try {
+    let buffer: Buffer;
+    let extension: string;
+
+    if (data instanceof File) {
+      extension = data.name.split('.').pop() || 'jpg';
+      const bytes = await data.arrayBuffer();
+      buffer = Buffer.from(bytes);
+    } else if (typeof data === 'string' && data.startsWith('data:image')) {
+      const matches = data.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (!matches) return null;
+      extension = matches[1];
+      buffer = Buffer.from(matches[2], 'base64');
+    } else if (typeof data === 'string' && (data.startsWith('http') || data.startsWith('/uploads'))) {
+      return data;
+    } else {
+      return null;
+    }
+
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(7);
+    const filename = `${nombre}_${timestamp}_${random}.${extension}`;
+    
+    const uploadDir = join(process.cwd(), 'public', 'uploads', 'products');
+    
+    if (!existsSync(uploadDir)) {
+      await mkdir(uploadDir, { recursive: true });
+    }
+
+    const filepath = join(uploadDir, filename);
+    await writeFile(filepath, buffer);
+    
+    return `/uploads/products/${filename}`;
+  } catch (error) {
+    console.error("❌ Error guardando imagen:", error);
+    return null;
+  }
 }
 
 // GET /api/productos/[id] - Obtener un producto específico
@@ -52,7 +110,19 @@ export async function GET(
         c.nombre as categoria_nombre,
         sc.nombre as subcategoria_nombre,
         p.created_at,
-        p.updated_at
+        p.updated_at,
+        COALESCE(
+          (SELECT json_agg(
+            json_build_object(
+              'id', pi.id,
+              'imagen_url', pi.imagen_url,
+              'orden', pi.orden,
+              'es_principal', pi.es_principal
+            ) ORDER BY pi.orden
+          )
+          FROM productos_imagenes pi 
+          WHERE pi.producto_id = p.id AND pi.activo = true AND pi.deleted_at IS NULL
+        ), '[]'::json) as imagenes_adicionales
       FROM productos p
       LEFT JOIN categorias_producto c ON p.categoria_id = c.id AND c.deleted_at IS NULL
       LEFT JOIN subcategorias_producto sc ON p.subcategoria_id = sc.id AND sc.deleted_at IS NULL
@@ -83,36 +153,105 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const client = await pool.connect();
+  
   try {
+    await client.query('BEGIN');
+    
     const { id } = await params;
-    const body: ProductoUpdateInput = await request.json();
-
-    const { 
-      nombre, 
-      descripcion, 
-      precio, 
-      stock, 
-      imagen_url,
-      categoria_id,
-      subcategoria_id,
-      sku,
-      codigo_barras,
-      marca,
-      modelo,
-      garantia_meses,
-      peso_kg,
-      dimensiones,
-      destacado,
-      activo 
-    } = body;
+    const contentType = request.headers.get('content-type') || '';
+    
+    let nombre: string | undefined;
+    let descripcion: string | undefined;
+    let precio: number | undefined;
+    let stock: number | undefined;
+    let categoria_id: string | undefined;
+    let subcategoria_id: string | undefined;
+    let sku: string | undefined;
+    let codigo_barras: string | undefined;
+    let marca: string | undefined;
+    let modelo: string | undefined;
+    let garantia_meses: number | undefined;
+    let peso_kg: number | undefined;
+    let dimensiones: Dimensiones | undefined;
+    let destacado: boolean | undefined;
+    let nuevaImagenPrincipal: File | null = null;
+    const nuevasImagenes: File[] = [];
+    let imagenesEliminar: number[] = [];
+    
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      
+      nombre = formData.get('nombre') as string;
+      descripcion = formData.get('descripcion') as string;
+      precio = parseFloat(formData.get('precio') as string);
+      stock = parseInt(formData.get('stock') as string);
+      categoria_id = formData.get('categoria_id') as string;
+      subcategoria_id = formData.get('subcategoria_id') as string;
+      sku = formData.get('sku') as string;
+      codigo_barras = formData.get('codigo_barras') as string;
+      marca = formData.get('marca') as string;
+      modelo = formData.get('modelo') as string;
+      garantia_meses = parseInt(formData.get('garantia_meses') as string);
+      peso_kg = parseFloat(formData.get('peso_kg') as string);
+      destacado = formData.get('destacado') === 'true';
+      
+      // Dimensiones
+      const largo = parseFloat(formData.get('dimensiones_largo') as string);
+      const ancho = parseFloat(formData.get('dimensiones_ancho') as string);
+      const alto = parseFloat(formData.get('dimensiones_alto') as string);
+      if (!isNaN(largo) || !isNaN(ancho) || !isNaN(alto)) {
+        dimensiones = { largo: largo || 0, ancho: ancho || 0, alto: alto || 0 };
+      }
+      
+      // Imagen principal
+      const imagenPrincipal = formData.get('imagen_url');
+      if (imagenPrincipal && imagenPrincipal instanceof File && imagenPrincipal.size > 0) {
+        nuevaImagenPrincipal = imagenPrincipal;
+      }
+      
+      // Imágenes adicionales
+      const imagenes = formData.getAll('imagenes_adicionales');
+      for (const img of imagenes) {
+        if (img instanceof File && img.size > 0) {
+          nuevasImagenes.push(img);
+        }
+      }
+      
+      // IDs de imágenes a eliminar
+      const eliminar = formData.getAll('eliminar_imagenes');
+      for (const elim of eliminar) {
+        if (typeof elim === 'string' && elim) {
+          imagenesEliminar.push(parseInt(elim));
+        }
+      }
+    } else {
+      const body = await request.json();
+      nombre = body.nombre;
+      descripcion = body.descripcion;
+      precio = body.precio;
+      stock = body.stock;
+      categoria_id = body.categoria_id;
+      subcategoria_id = body.subcategoria_id;
+      sku = body.sku;
+      codigo_barras = body.codigo_barras;
+      marca = body.marca;
+      modelo = body.modelo;
+      garantia_meses = body.garantia_meses;
+      peso_kg = body.peso_kg;
+      dimensiones = body.dimensiones;
+      destacado = body.destacado;
+      imagenesEliminar = body.imagenes_eliminar || [];
+    }
 
     // Verificar que el producto existe
-    const existe = await pool.query(
+    const existe = await client.query(
       `SELECT * FROM productos WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
 
     if (existe.rows.length === 0) {
+      await client.query('ROLLBACK');
       return NextResponse.json(
         { error: "Producto no encontrado" },
         { status: 404 }
@@ -121,13 +260,14 @@ export async function PUT(
 
     const productoAntes = existe.rows[0];
 
-    // Validar SKU único si se está actualizando
+    // Validar SKU único
     if (sku && sku !== productoAntes.sku) {
-      const skuExists = await pool.query(
+      const skuExists = await client.query(
         `SELECT id FROM productos WHERE sku = $1 AND id != $2 AND deleted_at IS NULL`,
         [sku, id]
       );
       if (skuExists.rows.length > 0) {
+        await client.query('ROLLBACK');
         return NextResponse.json(
           { error: "El SKU ya está registrado por otro producto" },
           { status: 409 }
@@ -135,9 +275,16 @@ export async function PUT(
       }
     }
 
-    // Construir consulta dinámica
+    // Procesar nueva imagen principal
+    let imagenPrincipalPath: string | null = productoAntes.imagen_url;
+    if (nuevaImagenPrincipal) {
+      imagenPrincipalPath = await guardarImagen(nuevaImagenPrincipal, `producto_principal`, 0);
+      console.log("✅ Nueva imagen principal guardada:", imagenPrincipalPath);
+    }
+
+    // Actualizar producto
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | boolean | null)[] = [];
     let paramIndex = 1;
 
     if (nombre !== undefined) {
@@ -149,28 +296,16 @@ export async function PUT(
       values.push(descripcion);
     }
     if (precio !== undefined) {
-      if (precio < 0) {
-        return NextResponse.json(
-          { error: "El precio no puede ser negativo" },
-          { status: 400 }
-        );
-      }
       updates.push(`precio = $${paramIndex++}`);
       values.push(precio);
     }
     if (stock !== undefined) {
-      if (stock < 0) {
-        return NextResponse.json(
-          { error: "El stock no puede ser negativo" },
-          { status: 400 }
-        );
-      }
       updates.push(`stock = $${paramIndex++}`);
       values.push(stock);
     }
-    if (imagen_url !== undefined) {
+    if (imagenPrincipalPath !== undefined) {
       updates.push(`imagen_url = $${paramIndex++}`);
-      values.push(imagen_url);
+      values.push(imagenPrincipalPath);
     }
     if (categoria_id !== undefined) {
       updates.push(`categoria_id = $${paramIndex++}`);
@@ -206,86 +341,110 @@ export async function PUT(
     }
     if (dimensiones !== undefined) {
       updates.push(`dimensiones = $${paramIndex++}`);
-      values.push(dimensiones);
+      values.push(JSON.stringify(dimensiones));
     }
     if (destacado !== undefined) {
       updates.push(`destacado = $${paramIndex++}`);
       values.push(destacado);
     }
-    if (activo !== undefined) {
-      updates.push(`activo = $${paramIndex++}`);
-      values.push(activo);
-    }
 
     updates.push(`updated_at = NOW()`);
 
-    if (updates.length === 0) {
-      return NextResponse.json(
-        { error: "No hay campos para actualizar" },
-        { status: 400 }
+    if (updates.length > 0) {
+      values.push(id);
+      const query = `
+        UPDATE productos 
+        SET ${updates.join(', ')}
+        WHERE id = $${paramIndex} AND deleted_at IS NULL
+        RETURNING *
+      `;
+      
+      await client.query(query, values);
+    }
+
+    // Eliminar imágenes marcadas
+    if (imagenesEliminar.length > 0) {
+      // Obtener las rutas de las imágenes a eliminar
+      const imagenesAEliminar = await client.query(
+        `SELECT imagen_url FROM productos_imagenes WHERE id = ANY($1::int[]) AND producto_id = $2`,
+        [imagenesEliminar, id]
+      );
+      
+      // Eliminar archivos físicos
+      for (const img of imagenesAEliminar.rows) {
+        try {
+          const imagePath = join(process.cwd(), 'public', img.imagen_url);
+          if (existsSync(imagePath)) {
+            await unlink(imagePath);
+            console.log("🗑️ Imagen eliminada:", img.imagen_url);
+          }
+        } catch (err) {
+          console.error("⚠️ Error eliminando imagen:", err);
+        }
+      }
+      
+      // Soft delete en BD
+      await client.query(
+        `UPDATE productos_imagenes 
+         SET deleted_at = NOW(), activo = false 
+         WHERE id = ANY($1::int[]) AND producto_id = $2`,
+        [imagenesEliminar, id]
       );
     }
 
-    // Agregar ID al final
-    values.push(id);
-
-    const query = `
-      UPDATE productos 
-      SET ${updates.join(', ')}
-      WHERE id = $${paramIndex} AND deleted_at IS NULL
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-    const productoDespues = result.rows[0];
-
-    // Obtener quién hizo el cambio
-    const cookieHeader = request.headers.get('cookie');
-    let usuarioCambioId = null;
-    
-    if (cookieHeader) {
-      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
-      const token = tokenMatch ? tokenMatch[1] : null;
+    // Agregar nuevas imágenes adicionales
+    if (nuevasImagenes.length > 0) {
+      // Obtener el orden actual máximo
+      const ordenActual = await client.query(
+        `SELECT COALESCE(MAX(orden), -1) as max_orden 
+         FROM productos_imagenes 
+         WHERE producto_id = $1 AND deleted_at IS NULL`,
+        [id]
+      );
+      const startOrden = (ordenActual.rows[0].max_orden || -1) + 1;
       
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-          usuarioCambioId = decoded.id;
-        } catch (e) {}
+      for (let i = 0; i < nuevasImagenes.length; i++) {
+        const imagen = nuevasImagenes[i];
+        const imagenPath = await guardarImagen(imagen, `producto_${id}`, startOrden + i);
+        
+        if (imagenPath) {
+          await client.query(
+            `INSERT INTO productos_imagenes (producto_id, imagen_url, orden, activo)
+             VALUES ($1, $2, $3, true)`,
+            [id, imagenPath, startOrden + i]
+          );
+        }
       }
     }
 
-    // Obtener IP y User-Agent
-    const ip = request.headers.get('x-forwarded-for') || '0.0.0.0';
-    const userAgent = request.headers.get('user-agent') || '';
+    await client.query('COMMIT');
 
-    // Registrar en auditoría
-    await pool.query(
-      `INSERT INTO audit_logs 
-        (usuario_id, accion, tabla, registro_id, datos_antes, datos_despues, ip, user_agent)
-       VALUES ($1, 'ACTUALIZAR', 'productos', $2, $3::jsonb, $4::jsonb, $5::inet, $6)`,
-      [
-        usuarioCambioId,
-        id,
-        JSON.stringify(productoAntes),
-        JSON.stringify(productoDespues),
-        ip,
-        userAgent
-      ]
-    );
-
-    // Obtener producto con nombres de categoría
-    const productoCompleto = await pool.query(`
+    // Obtener producto actualizado
+    const productoCompleto = await client.query(`
       SELECT 
         p.*,
         c.nombre as categoria_nombre,
-        sc.nombre as subcategoria_nombre
+        sc.nombre as subcategoria_nombre,
+        COALESCE(
+          (SELECT json_agg(
+            json_build_object(
+              'id', pi.id,
+              'imagen_url', pi.imagen_url,
+              'orden', pi.orden,
+              'es_principal', pi.es_principal
+            ) ORDER BY pi.orden
+          )
+          FROM productos_imagenes pi 
+          WHERE pi.producto_id = p.id AND pi.activo = true AND pi.deleted_at IS NULL
+        ), '[]'::json) as imagenes_adicionales
       FROM productos p
       LEFT JOIN categorias_producto c ON p.categoria_id = c.id
       LEFT JOIN subcategorias_producto sc ON p.subcategoria_id = sc.id
       WHERE p.id = $1
     `, [id]);
 
+    // Registrar en auditoría (opcional)
+    
     return NextResponse.json({
       success: true,
       message: "Producto actualizado correctamente",
@@ -293,15 +452,18 @@ export async function PUT(
     });
 
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error("Error PUT producto:", error);
     return NextResponse.json(
       { error: "Error actualizando producto" },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
 
-// PATCH /api/productos/[id] - Actualización parcial (para activar/desactivar)
+// PATCH /api/productos/[id] - Actualización parcial
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -317,22 +479,6 @@ export async function PATCH(
       );
     }
 
-    // Verificar que el producto existe
-    const existe = await pool.query(
-      `SELECT * FROM productos WHERE id = $1 AND deleted_at IS NULL`,
-      [id]
-    );
-
-    if (existe.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Producto no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    const productoAntes = existe.rows[0];
-
-    // Actualizar estado
     const result = await pool.query(
       `UPDATE productos 
        SET activo = $1, updated_at = NOW()
@@ -341,51 +487,17 @@ export async function PATCH(
       [activo, id]
     );
 
-    const productoDespues = result.rows[0];
-
-    // Obtener quién hizo el cambio
-    const cookieHeader = request.headers.get('cookie');
-    let usuarioCambioId = null;
-    
-    if (cookieHeader) {
-      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
-      const token = tokenMatch ? tokenMatch[1] : null;
-      
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-          usuarioCambioId = decoded.id;
-        } catch (e) {}
-      }
+    if (result.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Producto no encontrado" },
+        { status: 404 }
+      );
     }
-
-    // Obtener IP y User-Agent
-    const ip = request.headers.get('x-forwarded-for') || '0.0.0.0';
-    const userAgent = request.headers.get('user-agent') || '';
-
-    // ✅ CORREGIDO: Usar parámetros con $1, $2, etc. en lugar de interpolación
-    const accionAuditoria = activo ? 'ACTIVAR' : 'DESACTIVAR';
-    
-    await pool.query(
-      `INSERT INTO audit_logs 
-        (usuario_id, accion, tabla, registro_id, datos_antes, datos_despues, ip, user_agent)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::inet, $8)`,
-      [
-        usuarioCambioId,
-        accionAuditoria,  // 👈 Pasamos como parámetro, no interpolado
-        'productos',
-        id,
-        JSON.stringify({ activo: productoAntes.activo }),
-        JSON.stringify({ activo: productoDespues.activo }),
-        ip,
-        userAgent
-      ]
-    );
 
     return NextResponse.json({
       success: true,
       message: activo ? "Producto activado" : "Producto desactivado",
-      producto: productoDespues
+      producto: result.rows[0]
     });
 
   } catch (error) {
@@ -405,62 +517,20 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Verificar que el producto existe
-    const existe = await pool.query(
-      `SELECT * FROM productos WHERE id = $1 AND deleted_at IS NULL`,
+    const result = await pool.query(
+      `UPDATE productos 
+       SET deleted_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
       [id]
     );
 
-    if (existe.rows.length === 0) {
+    if (result.rows.length === 0) {
       return NextResponse.json(
         { error: "Producto no encontrado" },
         { status: 404 }
       );
     }
-
-    const productoAntes = existe.rows[0];
-
-    // Soft delete
-    await pool.query(
-      `UPDATE productos 
-       SET deleted_at = NOW()
-       WHERE id = $1 AND deleted_at IS NULL`,
-      [id]
-    );
-
-    // Obtener quién eliminó
-    const cookieHeader = request.headers.get('cookie');
-    let usuarioEliminacionId = null;
-    
-    if (cookieHeader) {
-      const tokenMatch = cookieHeader.match(/token=([^;]+)/);
-      const token = tokenMatch ? tokenMatch[1] : null;
-      
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-          usuarioEliminacionId = decoded.id;
-        } catch (e) {}
-      }
-    }
-
-    // Obtener IP y User-Agent
-    const ip = request.headers.get('x-forwarded-for') || '0.0.0.0';
-    const userAgent = request.headers.get('user-agent') || '';
-
-    // Registrar en auditoría
-    await pool.query(
-      `INSERT INTO audit_logs 
-        (usuario_id, accion, tabla, registro_id, datos_antes, ip, user_agent)
-       VALUES ($1, 'ELIMINAR', 'productos', $2, $3::jsonb, $4::inet, $5)`,
-      [
-        usuarioEliminacionId,
-        id,
-        JSON.stringify(productoAntes),
-        ip,
-        userAgent
-      ]
-    );
 
     return NextResponse.json({
       success: true,

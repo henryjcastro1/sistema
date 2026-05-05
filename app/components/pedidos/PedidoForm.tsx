@@ -1,9 +1,19 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useState, useEffect } from "react";
 import { PedidoFormProps, ItemPedidoFormData } from "./types";
 import { Producto } from "../../productos/types";
 import { Usuario } from "../usuarios/types";
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value).replace('COP', '').trim();
+};
 
 export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: PedidoFormProps) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -18,27 +28,7 @@ export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: Pedid
   const [buscadorProducto, setBuscadorProducto] = useState<string>("");
   const [productosFiltrados, setProductosFiltrados] = useState<Producto[]>([]);
 
-  // Cargar usuarios y productos al abrir el modal
-  useEffect(() => {
-    if (isOpen) {
-      loadUsuarios();
-      loadProductos();
-    }
-  }, [isOpen]);
-
-  // Filtrar productos cuando cambia el buscador
-  useEffect(() => {
-    if (buscadorProducto) {
-      const filtrados = productos.filter(p => 
-        p.nombre.toLowerCase().includes(buscadorProducto.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(buscadorProducto.toLowerCase()))
-      );
-      setProductosFiltrados(filtrados);
-    } else {
-      setProductosFiltrados(productos);
-    }
-  }, [buscadorProducto, productos]);
-
+  // 👇 DECLARAR LAS FUNCIONES PRIMERO (antes del useEffect)
   async function loadUsuarios() {
     try {
       const res = await fetch("/api/usuarios");
@@ -62,6 +52,28 @@ export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: Pedid
       console.error("Error cargando productos:", err);
     }
   }
+
+  // 👇 AHORA USARLAS EN EL useEffect (después de declaradas)
+  useEffect(() => {
+    if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadUsuarios();
+      loadProductos();
+    }
+  }, [isOpen]);
+
+  // Filtrar productos cuando cambia el buscador
+  useEffect(() => {
+    if (buscadorProducto) {
+      const filtrados = productos.filter(p => 
+        p.nombre.toLowerCase().includes(buscadorProducto.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(buscadorProducto.toLowerCase()))
+      );
+      setProductosFiltrados(filtrados);
+    } else {
+      setProductosFiltrados(productos);
+    }
+  }, [buscadorProducto, productos]);
 
   const agregarItem = (producto: Producto) => {
     // Verificar si el producto ya está en la lista
@@ -269,7 +281,7 @@ export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: Pedid
                       <div className="flex-1">
                         <div className="font-medium">{item.descripcion}</div>
                         <div className="text-sm text-gray-500">
-                          ${item.precio_unitario} c/u
+                         {formatCurrency(item.precio_unitario)} c/u
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -314,7 +326,7 @@ export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: Pedid
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm text-gray-600">Subtotal</label>
-                  <div className="text-xl font-bold">${calcularSubtotal().toFixed(2)}</div>
+                <div className="text-xl font-bold">{formatCurrency(calcularSubtotal())}</div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
@@ -357,7 +369,7 @@ export default function PedidoForm({ isOpen, onClose, onSubmit, loading }: Pedid
                 <div className="pt-3 border-t">
                   <div className="text-sm text-gray-600">Total</div>
                   <div className="text-2xl font-bold text-green-600">
-                    ${calcularTotal().toFixed(2)}
+                  {formatCurrency(calcularTotal())}
                   </div>
                 </div>
               </div>

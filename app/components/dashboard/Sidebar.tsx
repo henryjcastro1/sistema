@@ -1,3 +1,4 @@
+// app/components/dashboard/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
@@ -15,7 +16,9 @@ import {
   ChevronRight,
   BarChart3,
   CreditCard,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from "lucide-react";
 
 interface EmpresaConfig {
@@ -32,9 +35,25 @@ export default function Sidebar() {
     nombre_empresa: "HelpDesk",
     logo_url: null
   });
-
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Detectar tamaño de pantalla
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   // Cargar configuración empresa
   const cargarConfiguracion = async () => {
@@ -101,59 +120,43 @@ export default function Sidebar() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <aside className="fixed left-0 top-0 h-screen w-64 bg-gray-950 border-r border-gray-800 flex flex-col">
-        <div className="p-6 space-y-3">
-          <div className="h-10 w-10 bg-gray-800 rounded-lg animate-pulse"></div>
-          <div className="h-4 w-32 bg-gray-800 rounded animate-pulse"></div>
-        </div>
-      </aside>
-    );
-  }
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
-  return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-gray-950/95 backdrop-blur-xl border-r border-gray-800 flex flex-col justify-between">
-
+  const SidebarContent = () => (
+    <div className="relative z-10 h-full flex flex-col justify-between bg-gray-950/30 backdrop-blur-md">
       {/* HEADER */}
       <div>
-
-        <div className="flex items-center gap-3 px-5 py-6">
-
+        <div className="flex items-center gap-4 px-6 py-8 border-b border-white/10">
           {/* LOGO */}
-          <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center overflow-hidden">
-
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-sm flex items-center justify-center overflow-hidden border border-white/20 shadow-lg">
             {logoUrl ? (
               <Image
                 src={logoUrl}
                 alt={empresaConfig.nombre_empresa}
-                width={32}
-                height={32}
+                width={40}
+                height={40}
                 className="object-contain"
               />
             ) : (
-              <div className="text-white text-lg font-bold">
+              <div className="text-white text-2xl font-bold">
                 {empresaConfig.nombre_empresa.charAt(0)}
               </div>
             )}
-
           </div>
 
           {/* NAME */}
           <div className="leading-tight">
-            <p className="text-white font-semibold text-sm">
+            <p className="text-white font-bold text-lg">
               {empresaConfig.nombre_empresa}
             </p>
-            <p className="text-gray-400 text-xs">
+            <p className="text-gray-300 text-xs">
               Sistema de Gestión
             </p>
           </div>
-
         </div>
 
         {/* MENU */}
-        <nav className="mt-2 space-y-1">
-
+        <nav className="mt-6 px-4 space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
 
@@ -161,52 +164,49 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={closeMobileMenu}
                 className={`
-                  flex items-center gap-3 mx-3 px-4 py-2.5 rounded-lg text-sm
-                  transition-all duration-200
+                  flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+                  transition-all duration-200 backdrop-blur-sm
                   ${
                     isActive(item.href)
-                      ? "bg-white/10 text-white"
-                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                      ? "bg-gradient-to-r from-white/20 to-white/10 text-white shadow-lg border border-white/20"
+                      : "text-gray-300 hover:text-white hover:bg-white/10"
                   }
                 `}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-5 h-5" />
                 {item.label}
               </Link>
             );
           })}
 
           {/* CONFIG */}
-          <div className="mt-4">
-
+          <div className="mt-6 pt-4 border-t border-white/10">
             <button
               onClick={() => setConfigOpen(!configOpen)}
               className={`
                 flex items-center justify-between w-full
-                mx-3 px-4 py-2.5 rounded-lg text-sm transition
+                px-4 py-3 rounded-xl text-sm font-medium transition backdrop-blur-sm
                 ${
                   isConfigActive
-                    ? "bg-white/10 text-white"
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                    ? "bg-gradient-to-r from-white/20 to-white/10 text-white shadow-lg border border-white/20"
+                    : "text-gray-300 hover:text-white hover:bg-white/10"
                 }
               `}
             >
-
               <div className="flex items-center gap-3">
-                <Settings className="w-4 h-4" />
+                <Settings className="w-5 h-5" />
                 Configuración
               </div>
 
               {configOpen
-                ? <ChevronDown className="w-4 h-4"/>
-                : <ChevronRight className="w-4 h-4"/>}
-
+                ? <ChevronDown className="w-5 h-5" />
+                : <ChevronRight className="w-5 h-5" />}
             </button>
 
             {configOpen && (
-              <div className="mt-1 space-y-1">
-
+              <div className="mt-2 ml-8 space-y-1">
                 {configItems.map((item) => {
                   const Icon = item.icon;
 
@@ -214,13 +214,14 @@ export default function Sidebar() {
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={closeMobileMenu}
                       className={`
-                        flex items-center gap-3 mx-6 px-4 py-2 rounded-md text-sm
-                        transition-all
+                        flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm
+                        transition-all backdrop-blur-sm
                         ${
                           isActive(item.href)
-                            ? "text-white bg-white/10"
-                            : "text-gray-400 hover:text-white hover:bg-white/5"
+                            ? "text-white bg-white/20"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
                         }
                       `}
                     >
@@ -229,34 +230,85 @@ export default function Sidebar() {
                     </Link>
                   );
                 })}
-
               </div>
             )}
-
           </div>
-
         </nav>
-
       </div>
 
       {/* FOOTER */}
-      <div className="px-4 pb-6 space-y-3">
-
+      <div className="px-4 pb-8 space-y-4">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg
-          text-red-400 hover:bg-red-500/10 transition"
+          className="flex items-center gap-3 w-full px-4 py-3 rounded-xl
+          text-red-300 hover:bg-red-500/20 hover:text-red-200 transition backdrop-blur-sm font-medium"
         >
-          <LogOut className="w-4 h-4"/>
+          <LogOut className="w-5 h-5" />
           Cerrar sesión
         </button>
 
-        <p className="text-[11px] text-gray-500 text-center">
+        <p className="text-xs text-gray-400 text-center">
           HelpDesk v1.0
         </p>
-
       </div>
+    </div>
+  );
 
-    </aside>
+  if (isLoading) {
+    return (
+      <div className="fixed left-0 top-0 h-screen w-64 bg-gray-950">
+        <div className="p-6 space-y-3">
+          <div className="h-14 w-14 bg-gray-800 rounded-xl animate-pulse"></div>
+          <div className="h-4 w-40 bg-gray-800 rounded animate-pulse"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Botón de menú móvil */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2.5 bg-black/80 backdrop-blur-md rounded-xl border border-white/20 shadow-lg"
+      >
+        {isMobileMenuOpen ? (
+          <X className="w-5 h-5 text-white" />
+        ) : (
+          <Menu className="w-5 h-5 text-white" />
+        )}
+      </button>
+
+      {/* Overlay para móvil */}
+      {isMobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-40"
+          onClick={closeMobileMenu}
+        />
+      )}
+
+      {/* Sidebar Desktop y Mobile */}
+      <aside
+        className={`
+          fixed left-0 top-0 h-screen transition-all duration-300 ease-in-out z-40
+          ${isMobileMenuOpen ? 'left-0' : '-left-full md:left-0'}
+          w-64 md:w-64
+        `}
+      >
+        {/* Fondo con imagen */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/menu.webp"
+            alt="Menu Background"
+            fill
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-black/70" />
+        </div>
+
+        <SidebarContent />
+      </aside>
+    </>
   );
 }

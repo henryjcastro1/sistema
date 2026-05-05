@@ -19,6 +19,15 @@ interface PedidoInput {
   direccion_envio?: string;
 }
 
+// 👇 Definir interfaz para el payload del token
+interface TokenPayload {
+  id: string;
+  email: string;
+  rol: string;
+  iat?: number;
+  exp?: number;
+}
+
 // GET /api/pedidos - Listar todos los pedidos
 export async function GET() {
   try {
@@ -119,6 +128,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // 👇 OBTENER LA MONEDA BASE ACTIVA
+    const monedaResult = await client.query(
+      `SELECT id, codigo, simbolo, tasa_cambio 
+       FROM monedas 
+       WHERE es_base = true AND activo = true AND deleted_at IS NULL 
+       LIMIT 1`
+    );
+
+    if (monedaResult.rows.length === 0) {
+      throw new Error("No hay una moneda base configurada");
+    }
+
+    const monedaBase = monedaResult.rows[0];
+
     // Calcular subtotal
     let subtotal = 0;
     
@@ -155,7 +178,7 @@ export async function POST(req: Request) {
 
     const total_final = subtotal + impuesto - descuento + costo_envio;
 
-    // Crear el pedido
+    // 👇 CREAR EL PEDIDO CON INFORMACIÓN DE MONEDA
     const pedidoResult = await client.query(
       `INSERT INTO pedidos (
         usuario_id,
@@ -167,8 +190,12 @@ export async function POST(req: Request) {
         impuesto,
         descuento,
         costo_envio,
-        total_final
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        total_final,
+        moneda_id,
+        moneda_codigo,
+        moneda_simbolo,
+        tasa_cambio
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         usuario_id,
@@ -180,7 +207,11 @@ export async function POST(req: Request) {
         impuesto,
         descuento,
         costo_envio,
-        total_final
+        total_final,
+        monedaBase.id,
+        monedaBase.codigo,
+        monedaBase.simbolo,
+        monedaBase.tasa_cambio
       ]
     );
 
@@ -218,9 +249,12 @@ export async function POST(req: Request) {
       
       if (token) {
         try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+          // 👇 CORREGIDO: Usar TokenPayload en lugar de any
+          const decoded = jwt.verify(token, process.env.JWT_SECRET!) as TokenPayload;
           usuarioCreadorId = decoded.id;
-        } catch (e) {}
+        } catch (e) {
+          console.log("Token inválido al crear pedido");
+        }
       }
     }
 

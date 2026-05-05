@@ -3,6 +3,8 @@ services:
     image: postgres:16
     container_name: demo1_db
     restart: always
+    ports:
+      - "5432:5432"  
     environment:
       POSTGRES_DB: demo1
       POSTGRES_USER: helpdeskuser
@@ -23,10 +25,10 @@ services:
       DB_HOST: db
       DB_NAME: demo1
       JWT_SECRET: supersecreto123
-      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: "u5qJGptT8xNbZiG1ma1hjxz+MWVT2CBIT1IyvJVQY9I="  # 👈 AGREGAR
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: "u5qJGptT8xNbZiG1ma1hjxz+MWVT2CBIT1IyvJVQY9I=" 
 
-    volumes:  # 👈 EL VOLUMEN VA AQUÍ, en app, NO en db
-      - ./public/uploads:/app/public/uploads
+    volumes:  
+      - ./public/uploads:/app/public/uploads:delegated
     depends_on:
       - db
 

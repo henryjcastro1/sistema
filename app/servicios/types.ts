@@ -1,3 +1,5 @@
+// app/servicios/types.ts
+
 export interface Servicio {
   id: string;
   numero_servicio: string;
@@ -11,6 +13,7 @@ export interface Servicio {
   usuario_id: string;
   tecnico_id?: string;
   sla_config_id?: string;
+  categoria_id?: string;  // 👈 NUEVO CAMPO
   
   // Económico
   presupuesto?: number;
@@ -40,6 +43,8 @@ export interface Servicio {
   cliente_telefono?: string;
   tecnico_nombre?: string;
   sla_nombre?: string;
+  categoria_nombre?: string;  // 👈 NUEVO CAMPO
+  categoria_icono?: string;   // 👈 NUEVO CAMPO
   
   created_at: string;
   updated_at?: string;
@@ -50,7 +55,8 @@ export interface ServicioFormData {
   descripcion?: string;
   prioridad: number;
   direccion?: string;
-  cliente_id?: string;
+  categoria_id?: string;  // 👈 NUEVO CAMPO
+  cliente_id?: string;    // Para admin
 }
 
 export interface ServicioTableProps {
@@ -108,3 +114,67 @@ export interface ServicioStats {
   promedio_calificacion?: number;
 }
 
+// 👈 NUEVO: Tipo para categorías de servicios
+export interface CategoriaServicio {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  icono?: string;
+  activo: boolean;
+  orden: number;
+}
+
+// Configuración visual para las categorías
+export const CATEGORIA_CONFIG: Record<string, { icono: string; color: string; bgColor: string }> = {
+  'Desarrollo Web': { 
+    icono: '🌐', 
+    color: 'text-blue-700', 
+    bgColor: 'bg-blue-50' 
+  },
+  'Desarrollo Software': { 
+    icono: '💻', 
+    color: 'text-purple-700', 
+    bgColor: 'bg-purple-50' 
+  },
+  'Desarrollo Apps Móviles': { 
+    icono: '📱', 
+    color: 'text-green-700', 
+    bgColor: 'bg-green-50' 
+  },
+  'Soporte Técnico': { 
+    icono: '🛠️', 
+    color: 'text-orange-700', 
+    bgColor: 'bg-orange-50' 
+  },
+  'Gestión de Redes': { 
+    icono: '🔌', 
+    color: 'text-cyan-700', 
+    bgColor: 'bg-cyan-50' 
+  },
+  'Ciberseguridad': { 
+    icono: '🔒', 
+    color: 'text-red-700', 
+    bgColor: 'bg-red-50' 
+  },
+  'Consultoría IT': { 
+    icono: '📊', 
+    color: 'text-indigo-700', 
+    bgColor: 'bg-indigo-50' 
+  },
+  'Migración a la Nube': { 
+    icono: '☁️', 
+    color: 'text-sky-700', 
+    bgColor: 'bg-sky-50' 
+  },
+  'Pruebas de Software': { 
+    icono: '🧪', 
+    color: 'text-emerald-700', 
+    bgColor: 'bg-emerald-50' 
+  }
+};
+
+// Función helper para obtener la configuración de una categoría
+export const getCategoriaConfig = (nombre?: string) => {
+  if (!nombre) return { icono: '📋', color: 'text-gray-700', bgColor: 'bg-gray-50' };
+  return CATEGORIA_CONFIG[nombre] || { icono: '📋', color: 'text-gray-700', bgColor: 'bg-gray-50' };
+};

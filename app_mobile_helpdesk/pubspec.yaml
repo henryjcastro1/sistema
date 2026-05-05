@@ -49,6 +49,10 @@ dependencies:
   get_it: ^9.2.1
   permission_handler: ^12.0.1
   intl: ^0.20.2
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  share_plus: ^12.0.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -61,4 +65,9 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/nequi1.jpeg
+    - assets/images/nequi.jpeg
+    - assets/images/bancolombia.jpeg
     - assets/images/fondo1.png
+    - assets/images/logo1.png
+    

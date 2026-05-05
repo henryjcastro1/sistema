@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Servicio, ServicioTableProps } from "../../servicios/types";
+import { Servicio, ServicioTableProps, getCategoriaConfig } from "../../servicios/types";
 import { ToastContainer, useToast } from "../usuarios/Toast";
 
 export default function ServicioTable({ 
@@ -23,12 +23,24 @@ export default function ServicioTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState<string>("TODOS");
   const [filterPrioridad, setFilterPrioridad] = useState<string>("TODOS");
+  const [filterCategoria, setFilterCategoria] = useState<string>("TODOS"); // 👈 NUEVO
   
   // 👇 NUEVOS ESTADOS PARA RANGO DE FECHAS
   const [filterFecha, setFilterFecha] = useState<string>("TODOS");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [fechaFin, setFechaFin] = useState<string>("");
   const [mostrarCalendarios, setMostrarCalendarios] = useState(false);
+
+  // 👇 Obtener categorías únicas de los servicios
+  const categoriasUnicas = useMemo(() => {
+    const categorias = new Map<string, { id: string; nombre: string }>();
+    servicios.forEach(s => {
+      if (s.categoria_id && s.categoria_nombre && !categorias.has(s.categoria_id)) {
+        categorias.set(s.categoria_id, { id: s.categoria_id, nombre: s.categoria_nombre });
+      }
+    });
+    return Array.from(categorias.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [servicios]);
 
   const getEstadoColor = (estado: string): string => {
     switch (estado) {
@@ -98,6 +110,24 @@ export default function ServicioTable({
     setMostrarCalendarios(false);
   };
 
+  // Limpiar todos los filtros
+  const limpiarTodosFiltros = () => {
+    setSearchTerm("");
+    setFilterEstado("TODOS");
+    setFilterPrioridad("TODOS");
+    setFilterCategoria("TODOS");
+    limpiarFiltrosFecha();
+  };
+
+  // Verificar si hay filtros activos
+  const hayFiltrosActivos = searchTerm !== "" || 
+    filterEstado !== "TODOS" || 
+    filterPrioridad !== "TODOS" || 
+    filterCategoria !== "TODOS" ||
+    filterFecha !== "TODOS" ||
+    fechaInicio !== "" ||
+    fechaFin !== "";
+
   // Filtrar servicios
   const filteredServicios = useMemo(() => {
     return servicios.filter(s => {
@@ -109,6 +139,7 @@ export default function ServicioTable({
 
       const matchesEstado = filterEstado === "TODOS" || s.estado === filterEstado;
       const matchesPrioridad = filterPrioridad === "TODOS" || s.prioridad.toString() === filterPrioridad;
+      const matchesCategoria = filterCategoria === "TODOS" || s.categoria_id === filterCategoria;
 
       // Filtro por fecha
       let matchesFecha = true;
@@ -129,9 +160,9 @@ export default function ServicioTable({
         matchesFecha = fechaServicio > mesLimite;
       }
 
-      return matchesSearch && matchesEstado && matchesPrioridad && matchesFecha;
+      return matchesSearch && matchesEstado && matchesPrioridad && matchesCategoria && matchesFecha;
     });
-  }, [servicios, searchTerm, filterEstado, filterPrioridad, filterFecha, fechaInicio, fechaFin, hoyDateString, semanaLimite, mesLimite]);
+  }, [servicios, searchTerm, filterEstado, filterPrioridad, filterCategoria, filterFecha, fechaInicio, fechaFin, hoyDateString, semanaLimite, mesLimite]);
 
   const formatCurrency = (value?: number): string => {
     if (!value) return '-';
@@ -201,6 +232,22 @@ export default function ServicioTable({
                 />
               </div>
 
+              {/* Filtro por Categoría - NUEVO */}
+              <div className="md:w-48">
+                <select
+                  value={filterCategoria}
+                  onChange={(e) => setFilterCategoria(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none bg-white"
+                >
+                  <option value="TODOS">📂 Todas las categorías</option>
+                  {categoriasUnicas.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Filtro por Estado */}
               <div className="md:w-44">
                 <select
@@ -257,14 +304,9 @@ export default function ServicioTable({
               </div>
 
               {/* Botón para limpiar filtros */}
-              {(fechaInicio || fechaFin || filterFecha !== "TODOS" || filterEstado !== "TODOS" || filterPrioridad !== "TODOS" || searchTerm) && (
+              {hayFiltrosActivos && (
                 <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setFilterEstado("TODOS");
-                    setFilterPrioridad("TODOS");
-                    limpiarFiltrosFecha();
-                  }}
+                  onClick={limpiarTodosFiltros}
                   className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition border border-red-200 hover:border-red-300"
                 >
                   <span className="flex items-center gap-1">
@@ -337,7 +379,7 @@ export default function ServicioTable({
           </div>
         </div>
 
-        {/* Tabla (resto del código igual) */}
+        {/* Tabla */}
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-black"></div>
@@ -350,6 +392,7 @@ export default function ServicioTable({
                 <tr>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">#</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">N° Servicio</th>
+                  <th className="p-4 text-left text-sm font-semibold text-gray-700">Categoría</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Título</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Cliente</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Técnico</th>
@@ -363,123 +406,136 @@ export default function ServicioTable({
               <tbody>
                 {filteredServicios.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-gray-500">
+                    <td colSpan={11} className="p-8 text-center text-gray-500">
                       No hay servicios registrados
                     </td>
                   </tr>
                 ) : (
-                  filteredServicios.map((s, index) => (
-                    <tr key={s.id} className="border-t hover:bg-gray-50 transition">
-                      <td className="p-4 text-gray-500 font-mono text-sm">{index + 1}</td>
-                      <td className="p-4">
-                        <span className="font-mono font-medium text-gray-900">{s.numero_servicio}</span>
-                      </td>
-                      <td className="p-4 max-w-xs">
-                        <div className="font-medium text-gray-900 truncate" title={s.titulo}>
-                          {s.titulo}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="text-sm">
-                          <div className="font-medium text-gray-900">{s.cliente_nombre || 'N/A'}</div>
-                          {s.cliente_email && (
-                            <div className="text-xs text-gray-500">{s.cliente_email}</div>
+                  filteredServicios.map((s, index) => {
+                    const categoriaConfig = getCategoriaConfig(s.categoria_nombre);
+                    return (
+                      <tr key={s.id} className="border-t hover:bg-gray-50 transition">
+                        <td className="p-4 text-gray-500 font-mono text-sm">{index + 1}</td>
+                        <td className="p-4">
+                          <span className="font-mono font-medium text-gray-900">{s.numero_servicio}</span>
+                        </td>
+                        <td className="p-4">
+                          {s.categoria_nombre ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${categoriaConfig.bgColor} ${categoriaConfig.color}`}>
+                              <span>{categoriaConfig.icono}</span>
+                              {s.categoria_nombre}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Sin categoría</span>
                           )}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`text-sm ${s.tecnico_nombre ? 'text-gray-900' : 'text-gray-400 italic'}`}>
-                          {s.tecnico_nombre || 'Sin asignar'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPrioridadColor(s.prioridad)}`}>
-                          {getPrioridadTexto(s.prioridad)}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${getEstadoColor(s.estado)}`}>
-                          <span>{getEstadoIcon(s.estado)}</span>
-                          {s.estado.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`text-xs font-medium ${getSLAColor(s)}`}>
-                          {formatSLA(s)}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-gray-600">
-                        {formatDate(s.fecha_solicitado)}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          {/* Ver detalle */}
-                          <button
-                            onClick={() => onView?.(s)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="Ver detalle"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-
-                          {/* Asignar técnico (solo admin y solicitados) */}
-                          {esAdmin && s.estado === 'SOLICITADO' && (
+                        </td>
+                        <td className="p-4 max-w-xs">
+                          <div className="font-medium text-gray-900 truncate" title={s.titulo}>
+                            {s.titulo}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">{s.cliente_nombre || 'N/A'}</div>
+                            {s.cliente_email && (
+                              <div className="text-xs text-gray-500">{s.cliente_email}</div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-sm ${s.tecnico_nombre ? 'text-gray-900' : 'text-gray-400 italic'}`}>
+                            {s.tecnico_nombre || 'Sin asignar'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPrioridadColor(s.prioridad)}`}>
+                            {getPrioridadTexto(s.prioridad)}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${getEstadoColor(s.estado)}`}>
+                            <span>{getEstadoIcon(s.estado)}</span>
+                            {s.estado.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-xs font-medium ${getSLAColor(s)}`}>
+                            {formatSLA(s)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm text-gray-600">
+                          {formatDate(s.fecha_solicitado)}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            {/* Ver detalle */}
                             <button
-                              onClick={() => onAsignar?.(s)}
-                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
-                              title="Asignar técnico"
+                              onClick={() => onView?.(s)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="Ver detalle"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
                             </button>
-                          )}
 
-                          {/* Tomar servicio (técnico) */}
-                          {esTecnico && s.estado === 'SOLICITADO' && !s.tecnico_id && (
-                            <button
-                              onClick={() => onTomar?.(s)}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                              title="Tomar servicio"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </button>
-                          )}
+                            {/* Asignar técnico (solo admin y solicitados) */}
+                            {esAdmin && s.estado === 'SOLICITADO' && (
+                              <button
+                                onClick={() => onAsignar?.(s)}
+                                className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                                title="Asignar técnico"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              </button>
+                            )}
 
-                          {/* Completar servicio */}
-                          {(esTecnico || esAdmin) && s.estado === 'EN_PROCESO' && (
-                            <button
-                              onClick={() => onCompletar?.(s)}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                              title="Completar servicio"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </button>
-                          )}
+                            {/* Tomar servicio (técnico) */}
+                            {esTecnico && s.estado === 'SOLICITADO' && !s.tecnico_id && (
+                              <button
+                                onClick={() => onTomar?.(s)}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                                title="Tomar servicio"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </button>
+                            )}
 
-                          {/* Cancelar (admin) */}
-                          {esAdmin && s.estado !== 'COMPLETADO' && s.estado !== 'CANCELADO' && (
-                            <button
-                              onClick={() => onCancelar?.(s)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Cancelar servicio"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {/* Completar servicio */}
+                            {(esTecnico || esAdmin) && s.estado === 'EN_PROCESO' && (
+                              <button
+                                onClick={() => onCompletar?.(s)}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                                title="Completar servicio"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                            )}
+
+                            {/* Cancelar (admin) */}
+                            {esAdmin && s.estado !== 'COMPLETADO' && s.estado !== 'CANCELADO' && (
+                              <button
+                                onClick={() => onCancelar?.(s)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                title="Cancelar servicio"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

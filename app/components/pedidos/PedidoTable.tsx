@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { PedidoTableProps } from "./types";
+import { Pedido, PedidoTableProps } from "./types";
 import { ToastContainer, useToast } from "../usuarios/Toast";
 
 export default function PedidoTable({ 
@@ -21,7 +21,7 @@ export default function PedidoTable({
   const [filterEstado, setFilterEstado] = useState<string>("TODOS");
   const [filterFecha, setFilterFecha] = useState<string>("TODOS");
   
-  // 👇 NUEVOS ESTADOS PARA RANGO DE FECHAS
+  // Estados para rango de fechas
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [fechaFin, setFechaFin] = useState<string>("");
   const [mostrarCalendarios, setMostrarCalendarios] = useState(false);
@@ -46,6 +46,68 @@ export default function PedidoTable({
       case 'CANCELADO': return '❌';
       default: return '📋';
     }
+  };
+
+  // ✅ FUNCIÓN PARA FORMATEAR MONEDA SEGÚN EL PEDIDO (BIEN TIPADA)
+  const formatCurrency = (value: number, pedido?: Pedido) => {
+    const monedaCodigo = pedido?.moneda_codigo || 'COP';
+    const monedaSimbolo = pedido?.moneda_simbolo || '$';
+    
+    try {
+      // Configurar el formateador según la moneda
+      let locale = 'es-CO';
+      let currency = 'COP';
+      let minimumFractionDigits = 0;
+      
+      switch (monedaCodigo) {
+        case 'USD':
+          locale = 'en-US';
+          currency = 'USD';
+          minimumFractionDigits = 2;
+          break;
+        case 'EUR':
+          locale = 'de-DE';
+          currency = 'EUR';
+          minimumFractionDigits = 2;
+          break;
+        case 'COP':
+        case 'MXN':
+        case 'ARS':
+        case 'CLP':
+          locale = `es-${monedaCodigo.substring(0, 2)}`;
+          currency = monedaCodigo;
+          minimumFractionDigits = 0;
+          break;
+        default:
+          locale = 'es-CO';
+          currency = 'COP';
+          minimumFractionDigits = 0;
+      }
+      
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: minimumFractionDigits
+      }).format(value);
+    } catch (error) {
+      // Fallback si hay error con el formateador
+      return `${monedaSimbolo} ${value.toFixed(2)}`;
+    }
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatDateInput = (date: string) => {
+    if (!date) return '';
+    return new Date(date).toISOString().split('T')[0];
   };
 
   // Calcular las fechas límite fuera del useMemo
@@ -94,29 +156,6 @@ export default function PedidoTable({
       return matchesSearch && matchesEstado && matchesFecha;
     });
   }, [pedidos, searchTerm, filterEstado, filterFecha, fechaInicio, fechaFin, hoyDateString, semanaLimite, mesLimite]);
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2
-    }).format(value);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatDateInput = (date: string) => {
-    if (!date) return '';
-    return new Date(date).toISOString().split('T')[0];
-  };
 
   return (
     <>
@@ -252,7 +291,7 @@ export default function PedidoTable({
           </div>
         </div>
 
-        {/* Tabla (resto del código igual) */}
+        {/* Tabla */}
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-black"></div>
@@ -268,6 +307,7 @@ export default function PedidoTable({
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Cliente</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Fecha</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Total</th>
+                  <th className="p-4 text-left text-sm font-semibold text-gray-700">Moneda</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Estado</th>
                   <th className="p-4 text-left text-sm font-semibold text-gray-700">Acciones</th>
                 </tr>
@@ -275,7 +315,7 @@ export default function PedidoTable({
               <tbody>
                 {filteredPedidos.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-gray-500">
+                    <td colSpan={8} className="p-8 text-center text-gray-500">
                       No hay pedidos registrados
                     </td>
                   </tr>
@@ -296,7 +336,12 @@ export default function PedidoTable({
                         {formatDate(p.created_at)}
                       </td>
                       <td className="p-4 font-medium text-gray-900">
-                        {formatCurrency(p.total_final)}
+                        {formatCurrency(p.total_final, p)}
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
+                          {p.moneda_codigo || 'COP'}
+                        </span>
                       </td>
                       <td className="p-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${getEstadoColor(p.estado)}`}>
@@ -306,7 +351,7 @@ export default function PedidoTable({
                       </td>
                       <td className="p-4">
                         <div className="flex gap-2">
-                          {/* Botones de acción (igual que antes) */}
+                          {/* Botón Ver Detalle */}
                           <button
                             onClick={() => onView?.(p)}
                             className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all group relative border border-blue-200 hover:border-blue-300"

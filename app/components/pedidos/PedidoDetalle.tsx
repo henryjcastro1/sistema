@@ -8,11 +8,13 @@ export default function PedidoDetalle({ isOpen, onClose, pedido }: PedidoDetalle
 
   if (!isOpen || !pedido) return null;
 
+  // 👇 FUNCIÓN CORREGIDA - Usa COP como moneda base
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-ES', {
+    return new Intl.NumberFormat('es-CO', {
       style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(value);
   };
 

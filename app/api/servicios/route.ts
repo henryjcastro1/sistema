@@ -1,3 +1,4 @@
+// app/api/servicios/route.ts
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/bd";
 import jwt from "jsonwebtoken";
@@ -16,7 +17,8 @@ interface ServicioFormData {
   descripcion?: string;
   prioridad?: number;
   direccion?: string;
-  cliente_id?: string;  // 👈 NUEVO: ID del cliente seleccionado
+  cliente_id?: string;
+  categoria_id?: string;  // 👈 NUEVO: ID de la categoría
 }
 
 export async function GET(req: Request) {
@@ -42,6 +44,7 @@ export async function GET(req: Request) {
 
     const rol = userResult.rows[0]?.rol_nombre;
 
+    // 🔥 ACTUALIZADO: Incluir categorías en la consulta
     let query = `
       SELECT 
         s.*,
@@ -49,11 +52,15 @@ export async function GET(req: Request) {
         c.email as cliente_email,
         c.telefono as cliente_telefono,
         CONCAT(t.nombre, ' ', t.apellido) as tecnico_nombre,
-        sla.nombre as sla_nombre
+        sla.nombre as sla_nombre,
+        cs.nombre as categoria_nombre,
+        cs.icono as categoria_icono,
+        cs.id as categoria_id
       FROM servicios s
       LEFT JOIN usuarios c ON s.usuario_id = c.id
       LEFT JOIN usuarios t ON s.tecnico_id = t.id
       LEFT JOIN sla_config sla ON s.sla_config_id = sla.id
+      LEFT JOIN categorias_servicio cs ON s.categoria_id = cs.id AND cs.deleted_at IS NULL
       WHERE s.deleted_at IS NULL
     `;
 
@@ -110,7 +117,8 @@ export async function POST(req: Request) {
     const esAdmin = ['ADMIN', 'SUPERADMIN'].includes(userResult.rows[0]?.rol_nombre);
 
     const data = await req.json() as ServicioFormData;
-    const { titulo, descripcion, prioridad = 3, direccion, cliente_id } = data;
+    // 🔥 AGREGADO: categoria_id al destructuring
+    const { titulo, descripcion, prioridad = 3, direccion, cliente_id, categoria_id } = data;
 
     // Validaciones
     if (!titulo) {
@@ -120,12 +128,25 @@ export async function POST(req: Request) {
       );
     }
 
+    // 🔥 NUEVO: Validar que la categoría existe si se proporciona
+    if (categoria_id) {
+      const categoriaResult = await pool.query(
+        `SELECT id FROM categorias_servicio WHERE id = $1 AND activo = true AND deleted_at IS NULL`,
+        [categoria_id]
+      );
+      
+      if (categoriaResult.rows.length === 0) {
+        return NextResponse.json(
+          { error: "Categoría no válida" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Determinar el usuario_id del servicio
     let servicioUsuarioId = usuarioId;
     
-    // 👇 Si es admin y envió un cliente_id, usar ese cliente
     if (esAdmin && cliente_id) {
-      // Verificar que el cliente existe
       const clienteResult = await pool.query(
         `SELECT id FROM usuarios WHERE id = $1 AND deleted_at IS NULL`,
         [cliente_id]
@@ -152,7 +173,7 @@ export async function POST(req: Request) {
 
     const slaConfigId = slaResult.rows[0]?.id;
 
-    // Crear servicio con el usuario_id correcto
+    // 🔥 ACTUALIZADO: Incluir categoria_id en el INSERT
     const result = await pool.query(
       `INSERT INTO servicios (
         usuario_id,
@@ -160,16 +181,18 @@ export async function POST(req: Request) {
         descripcion,
         prioridad,
         direccion,
+        categoria_id,
         sla_config_id,
         estado
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'SOLICITADO')
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'SOLICITADO')
       RETURNING *`,
       [
-        servicioUsuarioId,  // 👈 Usa el ID del cliente (seleccionado o el propio usuario)
+        servicioUsuarioId,
         titulo,
         descripcion,
         prioridad,
         direccion,
+        categoria_id || null,  // 👈 NUEVO: incluir categoría
         slaConfigId
       ]
     );

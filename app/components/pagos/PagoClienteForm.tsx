@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ToastContainer, useToast } from "@/app/usuarios/components/Toast";
+import Image from "next/image";
 
 // 👇 Definir el tipo para Método de Pago
 interface MetodoPago {
@@ -32,7 +33,7 @@ export default function PagoClienteForm({
   const { toasts, showToast, removeToast } = useToast();
   
   const [tipoPago, setTipoPago] = useState<string>('');
-  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]); // 👈 Tipo específico
+  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
   const [metodoPagoId, setMetodoPagoId] = useState<string>('');
   const [notas, setNotas] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -42,6 +43,19 @@ export default function PagoClienteForm({
   const [comprobante, setComprobante] = useState<File | null>(null);
   const [previewComprobante, setPreviewComprobante] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 👇 Estados para QR
+  const [qrPlataforma, setQrPlataforma] = useState<string>('');
+
+  // 👇 FUNCIÓN PARA FORMATEAR MONEDA
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value);
+  };
 
   useEffect(() => {
     if (tipoPago === 'TARJETA') {
@@ -111,12 +125,21 @@ export default function PagoClienteForm({
       return;
     }
 
+    if (tipoPago === 'QR' && !qrPlataforma) {
+      showToast('Debes seleccionar una plataforma de pago', 'error');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const formData = new FormData();
       formData.append('pedido_id', pedidoId);
-      formData.append('tipo_pago', tipoPago);
+      formData.append('tipo_pago', tipoPago === 'QR' ? 'TRANSFERENCIA' : tipoPago);
+      
+      if (tipoPago === 'QR') {
+        formData.append('notas', `Pago por QR - ${qrPlataforma}`);
+      }
       
       if (metodoPagoId) {
         formData.append('metodo_pago_id', metodoPagoId);
@@ -145,6 +168,8 @@ export default function PagoClienteForm({
       showToast(
         tipoPago === 'TARJETA' 
           ? 'Pago procesándose...' 
+          : tipoPago === 'QR'
+          ? 'Pago con QR procesado. Pendiente de verificación.'
           : 'Comprobante recibido. Pendiente de verificación.',
         'success'
       );
@@ -169,219 +194,377 @@ export default function PagoClienteForm({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Pagar Pedido</h2>
-        <p className="text-gray-600 mb-6">
-          Pedido: <span className="font-mono font-medium">{numeroPedido}</span>
-        </p>
+      {/* Overlay con flex para centrar */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto pt-16">
+        {/* Contenedor con altura máxima y scroll - más arriba */}
+        <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto mt-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Pagar Pedido</h2>
+          <p className="text-gray-600 mb-6">
+            Pedido: <span className="font-mono font-medium">{numeroPedido}</span>
+          </p>
 
-<div className="mb-6 p-4 bg-blue-50 rounded-lg">
-  <p className="text-sm text-blue-800">
-    <span className="font-medium">Total a pagar:</span>{' '}
-    <span className="text-xl font-bold">
-      ${(typeof monto === 'number' ? monto : Number(monto) || 0).toFixed(2)}
-    </span>
-  </p>
-</div>
-
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Métodos de pago - descomentados y corregidos */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Método de pago
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => setTipoPago('TARJETA')}
-                className={`p-4 border-2 rounded-lg text-center transition ${
-                  tipoPago === 'TARJETA'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-2xl block mb-2">💳</span>
-                <span className="font-medium">Tarjeta</span>
-                <span className="text-xs text-gray-500 block mt-1">Crédito/Débito</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTipoPago('TRANSFERENCIA')}
-                className={`p-4 border-2 rounded-lg text-center transition ${
-                  tipoPago === 'TRANSFERENCIA'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-2xl block mb-2">🏦</span>
-                <span className="font-medium">Transferencia</span>
-                <span className="text-xs text-gray-500 block mt-1">Subir comprobante</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTipoPago('EFECTIVO')}
-                className={`p-4 border-2 rounded-lg text-center transition ${
-                  tipoPago === 'EFECTIVO'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-2xl block mb-2">💵</span>
-                <span className="font-medium">Efectivo</span>
-                <span className="text-xs text-gray-500 block mt-1">Pago en local</span>
-              </button>
-            </div>
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <span className="font-medium">Total a pagar:</span>{' '}
+              <span className="text-xl font-bold">
+                {formatCurrency(typeof monto === 'number' ? monto : Number(monto) || 0)}
+              </span>
+            </p>
           </div>
 
-          {/* Si es tarjeta, mostrar métodos guardados */}
-          {tipoPago === 'TARJETA' && (
-            <div className="border-t pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Selecciona una tarjeta
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Métodos de pago */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Método de pago
               </label>
-              {cargandoMetodos ? (
-                <div className="text-center py-4">
-                  <span className="animate-spin border-2 border-gray-300 border-t-black rounded-full w-6 h-6 block mx-auto"></span>
-                </div>
-              ) : metodosPago.length > 0 ? (
-                <div className="space-y-2">
-                  {metodosPago.map((metodo) => (
-                    <label
-                      key={metodo.id}
-                      className={`flex items-center gap-4 p-3 border rounded-lg cursor-pointer ${
-                        metodoPagoId === metodo.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="metodo_pago"
-                        value={metodo.id}
-                        checked={metodoPagoId === metodo.id}
-                        onChange={(e) => setMetodoPagoId(e.target.value)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-xl">💳</span>
-                      <div>
-                        <p className="font-medium">
-                          {metodo.tipo} **** {metodo.ultimos_digitos}
-                        </p>
-                        <p className="text-sm text-gray-500">{metodo.titular}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">
-                  No tienes tarjetas guardadas.{' '}
-                  <button className="text-blue-600 hover:underline">
-                    Agregar tarjeta
-                  </button>
-                </p>
-              )}
-            </div>
-          )}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTipoPago('TARJETA')}
+                  className={`p-4 border-2 rounded-lg text-center transition ${
+                    tipoPago === 'TARJETA'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">💳</span>
+                  <span className="font-medium">Tarjeta</span>
+                  <span className="text-xs text-gray-500 block mt-1">Crédito/Débito</span>
+                </button>
 
-          {/* Si es transferencia, mostrar subida de comprobante */}
-          {tipoPago === 'TRANSFERENCIA' && (
-            <div className="border-t pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Comprobante de transferencia
-              </label>
-              
-              <div className="flex flex-col items-center gap-4">
-                {previewComprobante ? (
-                  <div className="relative">
-                    <img
-                      src={previewComprobante}
-                      alt="Preview comprobante"
-                      className="max-h-48 rounded-lg border"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setComprobante(null);
-                        setPreviewComprobante(null);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                      }}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                <button
+                  type="button"
+                  onClick={() => setTipoPago('TRANSFERENCIA')}
+                  className={`p-4 border-2 rounded-lg text-center transition ${
+                    tipoPago === 'TRANSFERENCIA'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">🏦</span>
+                  <span className="font-medium">Transferencia</span>
+                  <span className="text-xs text-gray-500 block mt-1">Subir comprobante</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTipoPago('QR')}
+                  className={`p-4 border-2 rounded-lg text-center transition ${
+                    tipoPago === 'QR'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">📱</span>
+                  <span className="font-medium">Pago QR</span>
+                  <span className="text-xs text-gray-500 block mt-1">Nequi / Bancolombia</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTipoPago('EFECTIVO')}
+                  className={`p-4 border-2 rounded-lg text-center transition ${
+                    tipoPago === 'EFECTIVO'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">💵</span>
+                  <span className="font-medium">Efectivo</span>
+                  <span className="text-xs text-gray-500 block mt-1">Pago en local</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Si es tarjeta, mostrar métodos guardados */}
+            {tipoPago === 'TARJETA' && (
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona una tarjeta
+                </label>
+                {cargandoMetodos ? (
+                  <div className="text-center py-4">
+                    <span className="animate-spin border-2 border-gray-300 border-t-black rounded-full w-6 h-6 block mx-auto"></span>
+                  </div>
+                ) : metodosPago.length > 0 ? (
+                  <div className="space-y-2">
+                    {metodosPago.map((metodo) => (
+                      <label
+                        key={metodo.id}
+                        className={`flex items-center gap-4 p-3 border rounded-lg cursor-pointer ${
+                          metodoPagoId === metodo.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="metodo_pago"
+                          value={metodo.id}
+                          checked={metodoPagoId === metodo.id}
+                          onChange={(e) => setMetodoPagoId(e.target.value)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-xl">💳</span>
+                        <div>
+                          <p className="font-medium">
+                            {metodo.tipo} **** {metodo.ultimos_digitos}
+                          </p>
+                          <p className="text-sm text-gray-500">{metodo.titular}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 ) : (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full p-8 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-gray-400 transition"
+                  <p className="text-gray-500 text-sm">
+                    No tienes tarjetas guardadas.{' '}
+                    <button className="text-blue-600 hover:underline">
+                      Agregar tarjeta
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Si es QR, mostrar opciones */}
+            {tipoPago === 'QR' && (
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona plataforma de pago
+                </label>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Nequi */}
+                  <button
+                    type="button"
+                    onClick={() => setQrPlataforma('Nequi')}
+                    className={`p-4 border-2 rounded-lg text-center transition ${
+                      qrPlataforma === 'Nequi'
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
                   >
-                    <span className="text-4xl text-gray-400 block mb-2">📎</span>
-                    <p className="text-gray-600">Haz clic para subir el comprobante</p>
-                    <p className="text-xs text-gray-500 mt-1">PDF o imagen (máx. 5MB)</p>
+                    <span className="text-3xl block mb-2">📱</span>
+                    <span className="font-medium">Nequi</span>
+                  </button>
+
+                  {/* Bancolombia */}
+                  <button
+                    type="button"
+                    onClick={() => setQrPlataforma('Bancolombia')}
+                    className={`p-4 border-2 rounded-lg text-center transition ${
+                      qrPlataforma === 'Bancolombia'
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-3xl block mb-2">🏦</span>
+                    <span className="font-medium">Bancolombia</span>
+                  </button>
+                </div>
+
+                {qrPlataforma && (
+                  <div className="mt-6 space-y-6">
+                    {/* QR Image */}
+                    <div className="p-6 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold text-center mb-4">
+                        Escanea el código QR con tu app de {qrPlataforma}
+                      </h3>
+                      
+                      <div className="flex justify-center mb-4">
+                        <div className="w-48 h-48 bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
+                          {qrPlataforma === 'Nequi' ? (
+                            <img 
+                              src="/qrbanco/nequi.jpeg" 
+                              alt="QR Nequi"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <img 
+                              src="/qrbanco/bancolombia.jpeg" 
+                              alt="QR Bancolombia"
+                              className="w-full h-full object-contain"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-center text-sm text-gray-600 mb-4">
+                        <p className="mb-1">Monto: <span className="font-bold">{formatCurrency(monto)}</span></p>
+                        <p className="mb-1">Referencia: <span className="font-mono">{numeroPedido}</span></p>
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        <p className="font-medium">Instrucciones:</p>
+                        <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                          <li>Abre la app de {qrPlataforma}</li>
+                          <li>Selecciona la opción Pagar con QR</li>
+                          <li>Escanea el código QR mostrado</li>
+                          <li>Confirma el pago en tu app</li>
+                        </ol>
+                      </div>
+                    </div>
+
+                    {/* 👇 SECCIÓN PARA SUBIR COMPROBANTE DE PAGO QR */}
+                    <div className="border-t pt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Comprobante de pago QR (opcional)
+                      </label>
+                      
+                      <div className="flex flex-col items-center gap-4">
+                        {previewComprobante ? (
+                          <div className="relative">
+                            <img
+                              src={previewComprobante}
+                              alt="Preview comprobante"
+                              className="max-h-48 rounded-lg border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setComprobante(null);
+                                setPreviewComprobante(null);
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                              }}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full p-6 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-gray-400 transition"
+                          >
+                            <span className="text-3xl text-gray-400 block mb-2">📎</span>
+                            <p className="text-gray-600">Subir comprobante de pago</p>
+                            <p className="text-xs text-gray-500 mt-1">PDF o imagen (máx. 5MB)</p>
+                          </div>
+                        )}
+                        
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleComprobanteChange}
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                        />
+                      </div>
+
+                      <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-xs text-yellow-800 flex items-start gap-2">
+                          <span>⚠️</span>
+                          <span>
+                            Si tienes problemas con el QR, puedes subir el comprobante manualmente.
+                          </span>
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Si es transferencia, mostrar subida de comprobante */}
+            {tipoPago === 'TRANSFERENCIA' && (
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Comprobante de transferencia
+                </label>
                 
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleComprobanteChange}
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                />
-              </div>
+                <div className="flex flex-col items-center gap-4">
+                  {previewComprobante ? (
+                    <div className="relative">
+                      <img
+                        src={previewComprobante}
+                        alt="Preview comprobante"
+                        className="max-h-48 rounded-lg border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComprobante(null);
+                          setPreviewComprobante(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full p-8 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-gray-400 transition"
+                    >
+                      <span className="text-4xl text-gray-400 block mb-2">📎</span>
+                      <p className="text-gray-600">Haz clic para subir el comprobante</p>
+                      <p className="text-xs text-gray-500 mt-1">PDF o imagen (máx. 5MB)</p>
+                    </div>
+                  )}
+                  
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleComprobanteChange}
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                  />
+                </div>
 
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
-                <p className="font-medium mb-2">Datos para la transferencia:</p>
-                <p>Banco: Banco Ejemplo</p>
-                <p>CBU: 1234567890123456789012</p>
-                <p>Alias: HELP.MIEMPRESA</p>
-                <p>Titular: Mi Empresa SRL</p>
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
+                  <p className="font-medium mb-2">Datos para la transferencia:</p>
+                  <p>Banco: Banco Ejemplo</p>
+                  <p>CBU: 1234567890123456789012</p>
+                  <p>Alias: HELP.MIEMPRESA</p>
+                  <p>Titular: Mi Empresa SRL</p>
+                </div>
               </div>
+            )}
+
+            {/* Notas adicionales */}
+            <div className="border-t pt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Notas (opcional)
+              </label>
+              <textarea
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                placeholder="Agrega alguna nota sobre el pago..."
+                rows={3}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none resize-none"
+              />
             </div>
-          )}
 
-          {/* Notas adicionales */}
-          <div className="border-t pt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notas (opcional)
-            </label>
-            <textarea
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              placeholder="Agrega alguna nota sobre el pago..."
-              rows={3}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none resize-none"
-            />
-          </div>
-
-          {/* Botones de acción */}
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300 transition font-medium"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-black text-white p-3 rounded-lg hover:bg-gray-800 transition disabled:opacity-50 font-medium"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
-                  Procesando...
-                </span>
-              ) : (
-                'Confirmar Pago'
-              )}
-            </button>
-          </div>
-        </form>
+            {/* Botones de acción */}
+            <div className="flex gap-3 pt-4 border-t">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300 transition font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-black text-white p-3 rounded-lg hover:bg-gray-800 transition disabled:opacity-50 font-medium"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
+                    Procesando...
+                  </span>
+                ) : (
+                  'Confirmar Pago'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
       <ToastContainer toasts={toasts} removeToast={removeToast} />

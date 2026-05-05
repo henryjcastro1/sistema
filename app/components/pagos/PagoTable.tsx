@@ -101,13 +101,14 @@ export default function PagoTable({
     });
   }, [transacciones, searchTerm, filterEstado, filterTipoPago, filterFecha, fechaInicio, fechaFin, hoyDateString, semanaLimite, mesLimite]);
 
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2
-    }).format(value);
-  };
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+};
 
   const formatDate = (date: string): string => {
     return new Date(date).toLocaleDateString('es-ES', {

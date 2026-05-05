@@ -2,56 +2,288 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/producto.dart';
-import '../../../core/utils/currency_formatter.dart'; // 👈 AGREGAR
 import '../../providers/carrito_provider.dart';
 
-class DetalleProductoScreen extends StatelessWidget {
+class DetalleProductoScreen extends StatefulWidget {
   final Producto producto;
 
   const DetalleProductoScreen({super.key, required this.producto});
 
-  // Función para mostrar imágenes Base64
-  Widget _buildImageFromBase64(String? base64String) {
-    if (base64String == null) {
+  @override
+  State<DetalleProductoScreen> createState() => _DetalleProductoScreenState();
+}
+
+class _DetalleProductoScreenState extends State<DetalleProductoScreen> {
+  int _currentImageIndex = 0;
+  late List<String> _allImages;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildImageList();
+  }
+
+  void _buildImageList() {
+    _allImages = [];
+
+    // Agregar imagen principal
+    if (widget.producto.imagenUrl != null &&
+        widget.producto.imagenUrl!.isNotEmpty) {
+      _allImages.add(widget.producto.imagenUrl!);
+    }
+
+    // Agregar imágenes adicionales
+    if (widget.producto.imagenesAdicionales != null) {
+      for (final img in widget.producto.imagenesAdicionales!) {
+        if (img.imagenUrl.isNotEmpty) {
+          _allImages.add(img.imagenUrl);
+        }
+      }
+    }
+
+    // Si no hay imágenes, agregar un placeholder
+    if (_allImages.isEmpty) {
+      _allImages.add('');
+    }
+
+    print('📸 Total imágenes: ${_allImages.length}');
+  }
+
+  // 🔥 FUNCIÓN PARA CONSTRUIR URL COMPLETA
+  String _getFullImageUrl(String? imagePath) {
+    if (imagePath == null || imagePath.isEmpty) return '';
+
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    if (imagePath.startsWith('data:image')) {
+      return imagePath;
+    }
+
+    return 'http://192.168.1.7:3000$imagePath';
+  }
+
+  // 🔥 FUNCIÓN PARA MOSTRAR IMAGEN
+  Widget _buildImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
       return Center(
         child: Icon(
           Icons.image_not_supported,
-          size: 60,
+          size: 80,
           color: Colors.grey.shade400,
         ),
       );
     }
 
-    try {
-      String base64Data = base64String;
-      if (base64String.startsWith('data:image')) {
-        final parts = base64String.split(',');
-        if (parts.length > 1) {
-          base64Data = parts[1];
+    // Si es Base64
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        String base64Data = imageUrl;
+        if (imageUrl.contains(',')) {
+          base64Data = imageUrl.split(',').last;
         }
+        final imageBytes = base64Decode(base64Data);
+        return Image.memory(
+          imageBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('❌ Error cargando imagen Base64: $error');
+            return Center(
+              child: Icon(
+                Icons.broken_image,
+                size: 80,
+                color: Colors.grey.shade400,
+              ),
+            );
+          },
+        );
+      } catch (e) {
+        print('❌ Error decodificando Base64: $e');
+        return Center(
+          child: Icon(
+            Icons.error_outline,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
+        );
       }
+    }
 
-      final imageBytes = base64Decode(base64Data);
-      return Image.memory(
-        imageBytes,
+    // Si es URL de red
+    final fullUrl = _getFullImageUrl(imageUrl);
+    print('📸 Cargando imagen desde: $fullUrl');
+
+    return GestureDetector(
+      onTap: () {
+        if (_allImages.length > 1) {
+          _showFullImageGallery(context);
+        }
+      },
+      child: Image.network(
+        fullUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
-          print('❌ Error cargando imagen Base64: $error');
+          print('❌ Error cargando imagen: $error');
           return Center(
-            child: Icon(
-              Icons.broken_image,
-              size: 60,
-              color: Colors.grey.shade400,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.broken_image, size: 80, color: Colors.grey.shade400),
+                const SizedBox(height: 8),
+                Text(
+                  'Error al cargar imagen',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
             ),
           );
         },
-      );
-    } catch (e) {
-      print('❌ Error decodificando Base64: $e');
-      return Center(
-        child: Icon(Icons.error_outline, size: 60, color: Colors.grey.shade400),
-      );
-    }
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                        : null,
+                    strokeWidth: 2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Cargando imagen...',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 🔥 GALERÍA COMPLETA EN DIÁLOGO
+  void _showFullImageGallery(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            PageView.builder(
+              controller: PageController(initialPage: _currentImageIndex),
+              onPageChanged: (index) {
+                setState(() {
+                  _currentImageIndex = index;
+                });
+              },
+              itemCount: _allImages.length,
+              itemBuilder: (context, index) {
+                return InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 4,
+                  child: _allImages[index].isNotEmpty
+                      ? _buildImage(_allImages[index])
+                      : Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 80,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                );
+              },
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_currentImageIndex + 1} / ${_allImages.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🔥 BOTONES DE NAVEGACIÓN ENTRE IMÁGENES
+  Widget _buildNavigationButtons() {
+    if (_allImages.length <= 1) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          onPressed: _currentImageIndex > 0
+              ? () {
+                  setState(() {
+                    _currentImageIndex--;
+                  });
+                }
+              : null,
+          icon: Icon(Icons.chevron_left, size: 32),
+          color: Colors.grey.shade700,
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${_currentImageIndex + 1} / ${_allImages.length}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: _currentImageIndex < _allImages.length - 1
+              ? () {
+                  setState(() {
+                    _currentImageIndex++;
+                  });
+                }
+              : null,
+          icon: Icon(Icons.chevron_right, size: 32),
+          color: Colors.grey.shade700,
+        ),
+      ],
+    );
   }
 
   Widget _buildInfoRow(String label, String value) {
@@ -73,22 +305,22 @@ class DetalleProductoScreen extends StatelessWidget {
     );
   }
 
-  // 👇 FUNCIÓN MEJORADA CON VALIDACIÓN DE STOCK
   void _agregarAlCarrito(BuildContext context) {
     final carritoProvider = Provider.of<CarritoProvider>(
       context,
       listen: false,
     );
 
-    // Verificar si se puede agregar
-    final puedeAgregar = carritoProvider.puedeAgregar(producto, cantidad: 1);
+    final puedeAgregar = carritoProvider.puedeAgregar(
+      widget.producto,
+      cantidad: 1,
+    );
 
     if (!puedeAgregar) {
-      // Calcular cuánto más puede agregar
       final cantidadEnCarrito = carritoProvider.obtenerCantidadEnCarrito(
-        producto.id,
+        widget.producto.id,
       );
-      final disponible = producto.stock - cantidadEnCarrito;
+      final disponible = widget.producto.stock - cantidadEnCarrito;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -104,13 +336,15 @@ class DetalleProductoScreen extends StatelessWidget {
       return;
     }
 
-    // Intentar agregar
-    final agregado = carritoProvider.agregarProducto(producto, cantidad: 1);
+    final agregado = carritoProvider.agregarProducto(
+      widget.producto,
+      cantidad: 1,
+    );
 
     if (agregado) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${producto.nombre} agregado al carrito'),
+          content: Text('${widget.producto.nombre} agregado al carrito'),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -131,29 +365,12 @@ class DetalleProductoScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          producto.nombre,
+          widget.producto.nombre,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
-        // 👇 BOTÓN PARA VER EN OTRAS MONEDAS (opcional)
-        actions: [
-          if (producto.precioUsd != null || producto.precioEur != null)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.currency_exchange, color: Colors.white),
-              onSelected: (value) {
-                // Aquí podrías mostrar un diálogo con el precio en otras monedas
-                _mostrarOtrasMonedas(context);
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'info',
-                  child: Text('Ver precios en otras monedas'),
-                ),
-              ],
-            ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -162,20 +379,31 @@ class DetalleProductoScreen extends StatelessWidget {
             // Imagen principal
             Container(
               width: double.infinity,
-              height: 300,
-              color: Colors.grey.shade200,
-              child: _buildImageFromBase64(producto.imagenUrl),
+              height: 350,
+              color: Colors.grey.shade100,
+              child: _buildImage(_allImages[_currentImageIndex]),
             ),
 
+            // Navegación entre imágenes (solo si hay más de 1)
+            if (_allImages.length > 1) ...[
+              const SizedBox(height: 12),
+              _buildNavigationButtons(),
+            ],
+
+            const SizedBox(height: 8),
+
+            // Información del producto
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Marca y modelo
-                  if (producto.marca != null || producto.modelo != null) ...[
+                  if (widget.producto.marca != null ||
+                      widget.producto.modelo != null) ...[
                     Text(
-                      '${producto.marca ?? ''} ${producto.modelo ?? ''}'.trim(),
+                      '${widget.producto.marca ?? ''} ${widget.producto.modelo ?? ''}'
+                          .trim(),
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade600,
@@ -186,7 +414,7 @@ class DetalleProductoScreen extends StatelessWidget {
 
                   // Nombre
                   Text(
-                    producto.nombre,
+                    widget.producto.nombre,
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -194,7 +422,7 @@ class DetalleProductoScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // 👇 PRECIO PRINCIPAL CON FORMATO CORREGIDO
+                  // Precio
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -210,8 +438,7 @@ class DetalleProductoScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            producto
-                                .precioFormateado, // 👈 USA EL GETTER DEL MODELO
+                            widget.producto.precioFormateado,
                             style: const TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.bold,
@@ -221,8 +448,7 @@ class DetalleProductoScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(width: 16),
-                      // Stock
-                      if (producto.stock > 0)
+                      if (widget.producto.stock > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -243,7 +469,7 @@ class DetalleProductoScreen extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '${producto.stock} disponibles',
+                                '${widget.producto.stock} disponibles',
                                 style: TextStyle(
                                   color: Colors.green.shade700,
                                   fontWeight: FontWeight.w500,
@@ -285,59 +511,10 @@ class DetalleProductoScreen extends StatelessWidget {
                     ],
                   ),
 
-                  // 👇 PRECIOS EN OTRAS MONEDAS (opcional)
-                  if (producto.precioUsd != null ||
-                      producto.precioEur != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Precios en otras monedas',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              if (producto.precioUsd != null) ...[
-                                Expanded(
-                                  child: _buildOtraMonedaItem(
-                                    'USD',
-                                    producto.precioUsd!,
-                                    '\$',
-                                  ),
-                                ),
-                              ],
-                              if (producto.precioEur != null) ...[
-                                Expanded(
-                                  child: _buildOtraMonedaItem(
-                                    'EUR',
-                                    producto.precioEur!,
-                                    '€',
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
                   const Divider(height: 32),
 
                   // Descripción
-                  if (producto.descripcion != null) ...[
+                  if (widget.producto.descripcion != null) ...[
                     const Text(
                       'Descripción',
                       style: TextStyle(
@@ -347,15 +524,15 @@ class DetalleProductoScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      producto.descripcion!,
+                      widget.producto.descripcion!,
                       style: const TextStyle(fontSize: 14, height: 1.5),
                     ),
                     const SizedBox(height: 16),
                   ],
 
                   // Información adicional
-                  if (producto.sku != null ||
-                      producto.categoriaNombre != null) ...[
+                  if (widget.producto.sku != null ||
+                      widget.producto.categoriaNombre != null) ...[
                     const Text(
                       'Información adicional',
                       style: TextStyle(
@@ -364,17 +541,34 @@ class DetalleProductoScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    if (producto.sku != null)
-                      _buildInfoRow('SKU', producto.sku!),
-                    if (producto.categoriaNombre != null)
-                      _buildInfoRow('Categoría', producto.categoriaNombre!),
-                    if (producto.subcategoriaNombre != null)
+                    if (widget.producto.sku != null)
+                      _buildInfoRow('SKU', widget.producto.sku!),
+                    if (widget.producto.categoriaNombre != null)
+                      _buildInfoRow(
+                        'Categoría',
+                        widget.producto.categoriaNombre!,
+                      ),
+                    if (widget.producto.subcategoriaNombre != null)
                       _buildInfoRow(
                         'Subcategoría',
-                        producto.subcategoriaNombre!,
+                        widget.producto.subcategoriaNombre!,
                       ),
-                    if (producto.monedaCodigo != null)
-                      _buildInfoRow('Moneda', producto.monedaCodigo!),
+                    if (widget.producto.monedaCodigo != null)
+                      _buildInfoRow('Moneda', widget.producto.monedaCodigo!),
+                    if (widget.producto.garantiaMeses != null &&
+                        widget.producto.garantiaMeses! > 0)
+                      _buildInfoRow(
+                        'Garantía',
+                        '${widget.producto.garantiaMeses} meses',
+                      ),
+                    if (widget.producto.pesoKg != null &&
+                        widget.producto.pesoKg! > 0)
+                      _buildInfoRow('Peso', '${widget.producto.pesoKg} kg'),
+                    if (widget.producto.dimensiones != null)
+                      _buildInfoRow(
+                        'Dimensiones',
+                        '${widget.producto.dimensiones!['largo']} x ${widget.producto.dimensiones!['ancho']} x ${widget.producto.dimensiones!['alto']} cm',
+                      ),
                   ],
                 ],
               ),
@@ -396,7 +590,7 @@ class DetalleProductoScreen extends StatelessWidget {
           ],
         ),
         child: ElevatedButton(
-          onPressed: producto.stock > 0
+          onPressed: widget.producto.stock > 0
               ? () => _agregarAlCarrito(context)
               : null,
           style: ElevatedButton.styleFrom(
@@ -412,91 +606,6 @@ class DetalleProductoScreen extends StatelessWidget {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
-      ),
-    );
-  }
-
-  // 👇 FUNCIÓN AUXILIAR PARA MOSTRAR PRECIOS EN OTRAS MONEDAS
-  Widget _buildOtraMonedaItem(String codigo, double valor, String simbolo) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        children: [
-          Text(
-            codigo,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            CurrencyFormatter.format(
-              valor,
-              currencyCode: codigo,
-              symbol: simbolo,
-            ),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 👇 FUNCIÓN PARA MOSTRAR DIÁLOGO CON PRECIOS EN OTRAS MONEDAS
-  void _mostrarOtrasMonedas(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Precios en otras monedas'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (producto.precioUsd != null) ...[
-              ListTile(
-                leading: const Icon(Icons.attach_money),
-                title: const Text('Dólar Americano'),
-                trailing: Text(
-                  CurrencyFormatter.format(
-                    producto.precioUsd!,
-                    currencyCode: 'USD',
-                    symbol: '\$',
-                  ),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ),
-            ],
-            if (producto.precioEur != null) ...[
-              ListTile(
-                leading: const Icon(Icons.euro),
-                title: const Text('Euro'),
-                trailing: Text(
-                  CurrencyFormatter.format(
-                    producto.precioEur!,
-                    currencyCode: 'EUR',
-                    symbol: '€',
-                  ),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+// lib/domain/services/auth_service.dart
 import 'package:dio/dio.dart';
 import 'package:app_mobile_helpdesk/data/api/auth_api.dart';
 import '../../data/models/user.dart';
@@ -9,6 +10,11 @@ class AuthService {
 
   AuthService(this._authApi, this._storageService);
 
+  // 🔥 AGREGAR: Método para obtener el token
+  Future<String?> getToken() async {
+    return await _storageService.getToken();
+  }
+
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await _authApi.login(email, password);
@@ -16,7 +22,6 @@ class AuthService {
       if (response.statusCode == 200) {
         final data = response.data;
 
-        // 👇 Asegurar que el JSON tiene todos los campos
         final userData = {
           'id': data['user']['id'],
           'nombre': data['user']['nombre'],
@@ -24,8 +29,8 @@ class AuthService {
           'email': data['user']['email'],
           'rol': data['user']['rol'],
           'foto_url': data['user']['foto_url'],
-          'telefono': data['user']['telefono'], // 👈 AGREGADO
-          'created_at': data['user']['created_at'], // 👈 AGREGADO
+          'telefono': data['user']['telefono'],
+          'created_at': data['user']['created_at'],
         };
 
         final user = User.fromJson(userData);
@@ -60,7 +65,6 @@ class AuthService {
       if (response.statusCode == 200) {
         final data = response.data;
 
-        // 👇 Asegurar que el JSON tiene todos los campos
         final userData = {
           'id': data['user']['id'],
           'nombre': data['user']['nombre'],
@@ -68,8 +72,8 @@ class AuthService {
           'email': data['user']['email'],
           'rol': data['user']['rol'],
           'foto_url': data['user']['foto_url'],
-          'telefono': data['user']['telefono'], // 👈 AGREGADO
-          'created_at': data['user']['created_at'], // 👈 AGREGADO
+          'telefono': data['user']['telefono'],
+          'created_at': data['user']['created_at'],
         };
 
         return User.fromJson(userData);

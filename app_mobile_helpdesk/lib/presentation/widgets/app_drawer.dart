@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../screens/main/main_screen.dart';
+import '../screens/servicios/mis_servicios_screen.dart'; // 👈 IMPORTAR
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -49,18 +50,42 @@ class AppDrawer extends StatelessWidget {
 
             const Divider(color: Colors.white24),
 
-            // Opciones para USUARIOS AUTENTICADOS
+            // 👇 OPCIONES PARA USUARIOS AUTENTICADOS
             if (isAuthenticated) ...[
+              // 👉 Mis Servicios
+              _buildAuthMenuItem(
+                context,
+                icon: Icons.assignment,
+                title: 'Mis Servicios',
+                onTap: () {
+                  Navigator.pop(context); // Cerrar el drawer
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const MisServiciosScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              // 👉 Mis Pedidos
+              _buildAuthMenuItem(
+                context,
+                icon: Icons.shopping_bag,
+                title: 'Mis Pedidos',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/pedidos');
+                },
+              ),
+
               _buildAuthMenuItem(
                 context,
                 icon: Icons.person,
                 title: 'Mi Perfil',
                 onTap: () {
-                  Navigator.pop(context); // Cerrar el drawer
-                  Navigator.pushNamed(
-                    context,
-                    '/perfil',
-                  ); // 👈 Navegar a la pantalla de perfil
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/perfil');
                 },
               ),
 
@@ -70,9 +95,7 @@ class AppDrawer extends StatelessWidget {
                 title: 'Mis Pagos',
                 onTap: () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Pagos - Próximamente')),
-                  );
+                  Navigator.pushNamed(context, '/mis-pagos');
                 },
               ),
             ],

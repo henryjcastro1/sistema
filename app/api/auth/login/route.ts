@@ -13,7 +13,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ CORREGIDO: Quitar el "u." de todos los campos que no son del alias
     const result = await pool.query(
       `SELECT 
         u.id,

@@ -13,12 +13,12 @@ class WelcomeScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
             children: [
-              const Spacer(),
+              const Spacer(flex: 1),
 
-              // LOGO
+              // LOGO CON IMAGEN
               Container(
-                width: 130,
-                height: 130,
+                width: 140,
+                height: 140,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(30),
                   color: Colors.white.withOpacity(0.08),
@@ -31,10 +31,20 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.support_agent,
-                  size: 65,
-                  color: Colors.white,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    'assets/images/logo1.png',
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback en caso de que no encuentre la imagen
+                      return const Icon(
+                        Icons.support_agent,
+                        size: 65,
+                        color: Colors.white,
+                      );
+                    },
+                  ),
                 ),
               ),
 
@@ -104,7 +114,7 @@ class WelcomeScreen extends StatelessWidget {
 
               const SizedBox(height: 25),
 
-              const Spacer(),
+              const Spacer(flex: 1),
             ],
           ),
         ),

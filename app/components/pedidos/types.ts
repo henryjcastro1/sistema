@@ -14,11 +14,17 @@ export interface Pedido {
   descuento: number;
   costo_envio: number;
   total_final: number;
+  
+  // 👇 NUEVOS CAMPOS DE MONEDA
+  moneda_id?: string;
+  moneda_codigo?: string;
+  moneda_simbolo?: string;
+  tasa_cambio?: number;
+  
   created_at: string;
   updated_at: string;
   items?: ItemPedido[];
   usuario?: Usuario;
-  
 }
 
 export interface ItemPedido {
@@ -30,6 +36,11 @@ export interface ItemPedido {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  
+  // 👇 PRECIO EN MONEDA BASE (opcional)
+  precio_unitario_base?: number;
+  moneda_id?: string;
+  
   created_at: string;
   producto?: Producto;
 }
@@ -41,6 +52,9 @@ export interface PedidoFormData {
   descuento?: number;
   costo_envio?: number;
   direccion_envio?: string;
+  
+  // 👇 INFORMACIÓN DE MONEDA (opcional - si no se envía, se usa la moneda base)
+  moneda_id?: string;
 }
 
 export interface ItemPedidoFormData {
@@ -49,6 +63,9 @@ export interface ItemPedidoFormData {
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
+  
+  // 👇 PRECIO EN MONEDA BASE (opcional)
+  precio_unitario_base?: number;
 }
 
 export interface PedidoEditData {
@@ -58,6 +75,9 @@ export interface PedidoEditData {
   descuento?: number;
   costo_envio?: number;
   direccion_envio?: string;
+  
+  // 👇 EDITAR MONEDA (raro, pero posible)
+  moneda_id?: string;
 }
 
 export interface PedidoFormProps {
@@ -67,6 +87,9 @@ export interface PedidoFormProps {
   loading?: boolean;
   usuarios?: Usuario[];
   productos?: Producto[];
+  
+  // 👇 LISTA DE MONEDAS DISPONIBLES (opcional)
+  monedas?: Array<{id: string, codigo: string, simbolo: string}>;
 }
 
 export interface PedidoEditFormProps {
@@ -85,7 +108,7 @@ export interface PedidoTableProps {
   onView?: (pedido: Pedido) => void;
   onDelete?: (pedido: Pedido) => void;
   onPagar?: (pedido: Pedido) => void; 
-  onCambiarEstado?: (pedido: Pedido) => void
+  onCambiarEstado?: (pedido: Pedido) => void;
 }
 
 export interface PedidoDetalleProps {

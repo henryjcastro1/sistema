@@ -1,15 +1,16 @@
+// app/components/servicios/ServicioForm.tsx
 "use client";
 
 import { Fragment, useState, useEffect } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { Servicio, ServicioFormData } from "../../servicios/types";
+import { Servicio, ServicioFormData, CategoriaServicio } from "../../servicios/types";
 
 interface ServicioFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: ServicioFormData) => Promise<void>;
   servicio?: Servicio | null;
-  esAdmin?: boolean;  // 👈 Nueva prop para saber si es admin
+  esAdmin?: boolean;
 }
 
 interface Cliente {
@@ -19,12 +20,25 @@ interface Cliente {
   email: string;
 }
 
+// Iconos y colores por categoría
+const categoriaConfig: Record<string, { icono: string; color: string }> = {
+  'Desarrollo Web': { icono: '🌐', color: 'bg-blue-100 text-blue-700' },
+  'Desarrollo Software': { icono: '💻', color: 'bg-purple-100 text-purple-700' },
+  'Desarrollo Apps Móviles': { icono: '📱', color: 'bg-green-100 text-green-700' },
+  'Soporte Técnico': { icono: '🛠️', color: 'bg-orange-100 text-orange-700' },
+  'Gestión de Redes': { icono: '🔌', color: 'bg-cyan-100 text-cyan-700' },
+  'Ciberseguridad': { icono: '🔒', color: 'bg-red-100 text-red-700' },
+  'Consultoría IT': { icono: '📊', color: 'bg-indigo-100 text-indigo-700' },
+  'Migración a la Nube': { icono: '☁️', color: 'bg-sky-100 text-sky-700' },
+  'Pruebas de Software': { icono: '🧪', color: 'bg-emerald-100 text-emerald-700' }
+};
+
 export default function ServicioForm({ 
   isOpen, 
   onClose, 
   onSave,
   servicio,
-  esAdmin = false  // 👈 Por defecto false
+  esAdmin = false
 }: ServicioFormProps) {
   
   const [formData, setFormData] = useState({
@@ -32,18 +46,24 @@ export default function ServicioForm({
     descripcion: "",
     prioridad: 3,
     direccion: "",
-    cliente_id: ""  // 👈 Nuevo campo para el cliente
+    categoria_id: "",  // 👈 Nuevo campo
+    cliente_id: ""
   });
   
+  const [categorias, setCategorias] = useState<CategoriaServicio[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loadingCategorias, setLoadingCategorias] = useState(false);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Cargar clientes cuando se abre el modal (solo para admins)
+  // Cargar categorías al abrir
   useEffect(() => {
-    if (isOpen && esAdmin && !servicio) {
-      cargarClientes();
+    if (isOpen) {
+      cargarCategorias();
+      if (esAdmin && !servicio) {
+        cargarClientes();
+      }
     }
   }, [isOpen, esAdmin, servicio]);
 
@@ -55,7 +75,8 @@ export default function ServicioForm({
         descripcion: servicio.descripcion || "",
         prioridad: servicio.prioridad || 3,
         direccion: servicio.direccion || "",
-        cliente_id: "" // En edición no se puede cambiar el cliente
+        categoria_id: servicio.categoria_id || "",
+        cliente_id: ""
       });
     } else {
       setFormData({
@@ -63,11 +84,31 @@ export default function ServicioForm({
         descripcion: "",
         prioridad: 3,
         direccion: "",
+        categoria_id: "",
         cliente_id: ""
       });
     }
     setErrors({});
   }, [servicio, isOpen]);
+
+  const cargarCategorias = async () => {
+    setLoadingCategorias(true);
+    try {
+      const res = await fetch('/api/categorias-servicio', { 
+        credentials: 'include' 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategorias(data);
+      } else {
+        console.error('Error al cargar categorías');
+      }
+    } catch (error) {
+      console.error('Error cargando categorías:', error);
+    } finally {
+      setLoadingCategorias(false);
+    }
+  };
 
   const cargarClientes = async () => {
     setLoadingClientes(true);
@@ -78,8 +119,6 @@ export default function ServicioForm({
       if (res.ok) {
         const data = await res.json();
         setClientes(data);
-      } else {
-        console.error('Error al cargar clientes');
       }
     } catch (error) {
       console.error('Error cargando clientes:', error);
@@ -95,7 +134,10 @@ export default function ServicioForm({
       newErrors.titulo = "El título es requerido";
     }
     
-    // Si es admin y es un servicio nuevo, validar que seleccione cliente
+    if (!formData.categoria_id) {
+      newErrors.categoria_id = "Debe seleccionar una categoría de servicio";
+    }
+    
     if (esAdmin && !servicio && !formData.cliente_id) {
       newErrors.cliente_id = "Debe seleccionar un cliente";
     }
@@ -129,7 +171,6 @@ export default function ServicioForm({
       [name]: name === 'prioridad' ? parseInt(value) : value
     }));
     
-    // Limpiar error del campo
     if (errors[name]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -137,6 +178,12 @@ export default function ServicioForm({
         return newErrors;
       });
     }
+  };
+
+  const getCategoriaConfig = (categoriaId: string) => {
+    const categoria = categorias.find(c => c.id === categoriaId);
+    if (!categoria) return { icono: '📋', color: 'bg-gray-100 text-gray-700' };
+    return categoriaConfig[categoria.nombre] || { icono: categoria.icono || '📋', color: 'bg-gray-100 text-gray-700' };
   };
 
   return (
@@ -171,7 +218,7 @@ export default function ServicioForm({
                 </Dialog.Title>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Selector de Cliente - SOLO PARA ADMINS y SOLO en creación */}
+                  {/* Selector de Cliente - SOLO PARA ADMINS */}
                   {esAdmin && !servicio && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -198,18 +245,52 @@ export default function ServicioForm({
                       {errors.cliente_id && (
                         <p className="mt-1 text-sm text-red-600">{errors.cliente_id}</p>
                       )}
-                      {clientes.length === 0 && !loadingClientes && (
-                        <p className="mt-1 text-sm text-amber-600">
-                          No hay clientes disponibles
-                        </p>
-                      )}
                     </div>
                   )}
+
+                  {/* CATEGORÍA DE SERVICIO - NUEVO */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Categoría del Servicio *
+                    </label>
+                    <select
+                      name="categoria_id"
+                      value={formData.categoria_id}
+                      onChange={handleChange}
+                      disabled={loadingCategorias}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none transition bg-white ${
+                        errors.categoria_id ? 'border-red-500' : 'border-gray-200'
+                      }`}
+                    >
+                      <option value="">
+                        {loadingCategorias ? 'Cargando categorías...' : 'Seleccionar categoría...'}
+                      </option>
+                      {categorias.map((categoria) => {
+                        const config = categoriaConfig[categoria.nombre] || { icono: '📋', color: '' };
+                        return (
+                          <option key={categoria.id} value={categoria.id}>
+                            {config.icono} {categoria.nombre}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {errors.categoria_id && (
+                      <p className="mt-1 text-sm text-red-600">{errors.categoria_id}</p>
+                    )}
+                    {formData.categoria_id && (
+                      <div className="mt-2">
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm ${getCategoriaConfig(formData.categoria_id).color}`}>
+                          {getCategoriaConfig(formData.categoria_id).icono}
+                          {categorias.find(c => c.id === formData.categoria_id)?.nombre}
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Título */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Título *
+                      Título del Servicio *
                     </label>
                     <input
                       type="text"
@@ -219,7 +300,7 @@ export default function ServicioForm({
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none transition ${
                         errors.titulo ? 'border-red-500' : 'border-gray-200'
                       }`}
-                      placeholder="Ej: Reparación de PC"
+                      placeholder="Ej: Desarrollo de tienda online"
                     />
                     {errors.titulo && (
                       <p className="mt-1 text-sm text-red-600">{errors.titulo}</p>

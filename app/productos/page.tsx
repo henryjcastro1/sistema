@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Producto, ProductoFormData, ProductoEditData, Categoria, Moneda } from "./types";
 import ProductoTable from "../components/productos/ProductoTable";
 import ProductoForm from "../components/productos/ProductoForm";
-import ProductoEditForm from "../components/productos/ProductoEditForm"; // 👈 Importar el componente de edición
+import ProductoEditForm from "../components/productos/ProductoEditForm";
 
 export default function ProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -95,18 +95,23 @@ export default function ProductosPage() {
     }
   }
 
-  // Manejar edición de producto
-  async function handleEditProducto(id: string, data: Partial<ProductoEditData>) {
+  // ✅ SOLO UNA FUNCIÓN handleEditProducto - CORREGIDA
+  async function handleEditProducto(id: string, data: Partial<ProductoEditData> | FormData) {
     setFormLoading(true);
     try {
-      const res = await fetch(`/api/productos/${id}`, {
+      const options: RequestInit = {
         method: 'PUT',
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
+      };
+      
+      if (data instanceof FormData) {
+        options.body = data;
+        // No poner Content-Type, el navegador lo pone automáticamente
+      } else {
+        options.headers = { "Content-Type": "application/json" };
+        options.body = JSON.stringify(data);
+      }
+      
+      const res = await fetch(`/api/productos/${id}`, options);
       const result = await res.json();
 
       if (!res.ok) {
@@ -156,17 +161,15 @@ export default function ProductosPage() {
         </div>
       )}
 
-      {/* ✅ Tabla con callback de edición AHORA INCLUYE onEdit */}
       <ProductoTable 
         productos={productos}
         loading={loading}
         onRefresh={loadProductos}
         categorias={categorias}
         monedas={monedas}
-        onEdit={handleEditClick} // 👈 ESTA ES LA LÍNEA QUE FALTABA
+        onEdit={handleEditClick}
       />
 
-      {/* Modal de creación */}
       <ProductoForm
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -176,7 +179,6 @@ export default function ProductosPage() {
         monedas={monedas}
       />
 
-      {/* Modal de edición (necesitas crear este componente) */}
       <ProductoEditForm
         isOpen={editModalOpen}
         onClose={() => {

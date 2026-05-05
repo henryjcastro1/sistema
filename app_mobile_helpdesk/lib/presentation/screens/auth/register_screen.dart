@@ -668,14 +668,14 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 _acceptTerms = value ?? false;
                               });
                             },
-                            fillColor: MaterialStateProperty.resolveWith<Color>(
-                              (Set<MaterialState> states) {
-                                if (states.contains(MaterialState.selected)) {
-                                  return Colors.white;
-                                }
-                                return Colors.white.withOpacity(0.3);
-                              },
-                            ),
+                            fillColor: WidgetStateProperty.resolveWith<Color>((
+                              Set<WidgetState> states,
+                            ) {
+                              if (states.contains(WidgetState.selected)) {
+                                return Colors.white;
+                              }
+                              return Colors.white.withOpacity(0.3);
+                            }),
                             checkColor: Colors.black,
                           ),
                           Expanded(

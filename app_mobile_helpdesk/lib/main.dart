@@ -1,6 +1,9 @@
 import 'package:app_mobile_helpdesk/presentation/providers/carrito_provider.dart'; // 👈 AGREGAR
 import 'package:app_mobile_helpdesk/presentation/screens/carrito/carrito_screen.dart';
+import 'package:app_mobile_helpdesk/presentation/screens/pagos/mis_pagos_screen.dart';
+import 'package:app_mobile_helpdesk/presentation/screens/pedidos/pedidos_screen.dart';
 import 'package:app_mobile_helpdesk/presentation/screens/perfil/perfil_screen.dart';
+import 'package:app_mobile_helpdesk/presentation/screens/servicios/mis_servicios_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/di/injection.dart';
@@ -38,6 +41,9 @@ class MyApp extends StatelessWidget {
           '/register': (context) => const RegisterScreen(),
           '/perfil': (context) => const PerfilScreen(),
           '/carrito': (context) => const CarritoScreen(),
+          '/pedidos': (context) => const PedidosScreen(),
+          '/mis-pagos': (context) => const MisPagosScreen(),
+          '/mis-servicios': (context) => const MisServiciosScreen(),
         },
       ),
     );

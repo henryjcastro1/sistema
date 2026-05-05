@@ -18,13 +18,25 @@ export default function PagosPage() {
     montoTotal: 0
   });
 
-// Función para formatear el monto total (con validación completa)
-const formatMontoTotal = (monto: number | string | null | undefined): string => {
-  if (monto === null || monto === undefined) return '$0.00';
-  
-  const numero = typeof monto === 'number' ? monto : parseFloat(monto) || 0;
-  return `$${numero.toFixed(2)}`;
-};
+  // 👇 FUNCIÓN CORREGIDA - Usa COP con puntos de miles
+  const formatMontoTotal = (monto: number | string | null | undefined): string => {
+    if (monto === null || monto === undefined) return '$0';
+    
+    let numero: number;
+    if (typeof monto === 'number') {
+      numero = monto;
+    } else {
+      numero = parseFloat(monto) || 0;
+    }
+    
+    // Formatear con Intl.NumberFormat para COP
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(numero);
+  };
 
   async function loadTransacciones() {
     try {
@@ -37,11 +49,10 @@ const formatMontoTotal = (monto: number | string | null | undefined): string => 
       const completados = data.filter((t: Transaccion) => t.estado === 'COMPLETADO').length;
       const pendientes = data.filter((t: Transaccion) => t.estado === 'PENDIENTE').length;
       
-      // CORREGIDO: Convertir monto a número si viene como string
+      // Convertir monto a número si viene como string
       const montoTotal = data
         .filter((t: Transaccion) => t.estado === 'COMPLETADO')
         .reduce((sum: number, t: Transaccion) => {
-          // Asegurar que monto sea número
           const monto = typeof t.monto === 'string' ? parseFloat(t.monto) : (t.monto || 0);
           return sum + monto;
         }, 0);
@@ -130,8 +141,9 @@ const formatMontoTotal = (monto: number | string | null | undefined): string => 
             </div>
             <div>
               <p className="text-sm text-gray-500">Monto Total</p>
-              {/* CORREGIDO: Usar la función formatMontoTotal */}
-              <p className="text-2xl font-bold text-purple-600">{formatMontoTotal(stats.montoTotal)}</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {formatMontoTotal(stats.montoTotal)}
+              </p>
             </div>
           </div>
         </div>

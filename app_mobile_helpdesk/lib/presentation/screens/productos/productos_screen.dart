@@ -66,6 +66,76 @@ class _ProductosScreenState extends State<ProductosScreen> {
     }
   }
 
+  String _getFullImageUrl(String? imagePath) {
+    if (imagePath == null || imagePath.isEmpty) return '';
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    if (imagePath.startsWith('data:image')) {
+      return imagePath;
+    }
+    return ApiEndpoints.getImageUrl(imagePath);
+  }
+
+  Widget _buildProductImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Icon(
+        Icons.image_not_supported,
+        size: 40,
+        color: Colors.grey.shade400,
+      );
+    }
+
+    // Base64
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        String base64Data = imageUrl;
+        if (imageUrl.contains(',')) {
+          base64Data = imageUrl.split(',').last;
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            base64Decode(base64Data),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                Icon(Icons.broken_image, size: 40, color: Colors.grey.shade400),
+          ),
+        );
+      } catch (e) {
+        return Icon(Icons.error_outline, size: 40, color: Colors.grey.shade400);
+      }
+    }
+
+    // URL de red
+    final fullUrl = ApiEndpoints.getImageUrl(imageUrl);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        fullUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) =>
+            Icon(Icons.broken_image, size: 40, color: Colors.grey.shade400),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                    : null,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _cargarCategorias() async {
     print('📡 Iniciando carga de categorías...');
     print('🔗 URL: ${ApiEndpoints.baseUrl}/categorias');
@@ -73,11 +143,8 @@ class _ProductosScreenState extends State<ProductosScreen> {
     try {
       final response = await Dio().get('${ApiEndpoints.baseUrl}/categorias');
       print('📥 Status code categorías: ${response.statusCode}');
-      print('📥 Response type categorías: ${response.data.runtimeType}');
 
       if (response.statusCode == 200) {
-        print('📦 Datos de categorías recibidos');
-
         if (response.data is Map && response.data['categorias'] is List) {
           final categoriasList = response.data['categorias'] as List;
           print('📊 Número de categorías: ${categoriasList.length}');
@@ -87,10 +154,8 @@ class _ProductosScreenState extends State<ProductosScreen> {
                 .map((c) {
                   try {
                     return Categoria.fromJson(c);
-                  } catch (e, stackTrace) {
+                  } catch (e) {
                     print('❌ Error parseando categoría: $c');
-                    print('❌ Error: $e');
-                    print('📚 StackTrace: $stackTrace');
                     return null;
                   }
                 })
@@ -98,14 +163,10 @@ class _ProductosScreenState extends State<ProductosScreen> {
                 .toList();
           });
           print('✅ Categorías cargadas: ${_categorias.length}');
-        } else {
-          print('❌ Estructura de categorías incorrecta');
-          print('📥 Data: ${response.data}');
         }
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       print('❌ Error cargando categorías: $e');
-      print('📚 StackTrace: $stackTrace');
     }
   }
 
@@ -125,20 +186,14 @@ class _ProductosScreenState extends State<ProductosScreen> {
     });
 
     print('📡 Cargando productos (offset: $_offset, limit: $_limit)');
-    print('🔗 URL: ${ApiEndpoints.baseUrl}/productos');
-    print(
-      '📊 Parámetros: categoria=$_categoriaSeleccionada, busqueda=$_busqueda',
-    );
 
     try {
       final token = await storageService.getToken();
-      print('🔑 Token ${token != null ? 'disponible' : 'no disponible'}');
 
       final queryParams = {
         'limit': _limit.toString(),
         'offset': _offset.toString(),
-        if (_categoriaSeleccionada != null)
-          'categoria': _categoriaSeleccionada!,
+        'categoria': ?_categoriaSeleccionada,
         if (_busqueda != null && _busqueda!.isNotEmpty) 'busqueda': _busqueda!,
       };
 
@@ -152,40 +207,23 @@ class _ProductosScreenState extends State<ProductosScreen> {
         ),
       );
 
-      print('📥 Status code productos: ${response.statusCode}');
-      print('📥 Response type productos: ${response.data.runtimeType}');
-
       if (response.statusCode == 200) {
-        print('✅ Respuesta exitosa');
-
         final data = response.data;
-        print('📦 Data keys: ${data.keys}');
 
         if (data['productos'] is List) {
           final productosList = data['productos'] as List;
           print('📊 Productos recibidos: ${productosList.length}');
-
-          if (productosList.isEmpty) {
-            print('⚠️ No hay productos en esta página');
-          }
 
           final nuevosProductos = <Producto>[];
 
           for (var i = 0; i < productosList.length; i++) {
             try {
               final productoJson = productosList[i];
-              print('🔍 Parseando producto $i: ${productoJson['nombre']}');
-
               final producto = Producto.fromJson(productoJson);
               nuevosProductos.add(producto);
-
-              print(
-                '✅ Producto parseado: ${producto.nombre} - ${producto.precioFormateado}',
-              );
-            } catch (e, stackTrace) {
+              print('✅ Producto parseado: ${producto.nombre}');
+            } catch (e) {
               print('❌ Error parseando producto $i: $e');
-              print('📦 JSON del producto: ${productosList[i]}');
-              print('📚 StackTrace: $stackTrace');
             }
           }
 
@@ -200,45 +238,32 @@ class _ProductosScreenState extends State<ProductosScreen> {
           });
 
           print('✅ Total productos cargados: ${_productos.length}');
-          print('📊 HasMore: $_hasMore');
-          print('📊 Nuevo offset: $_offset');
         } else {
-          print('❌ La respuesta no contiene la lista de productos');
-          print('📥 Data: $data');
           setState(() {
             _errorMessage = 'Formato de respuesta incorrecto';
           });
         }
       } else {
-        print('❌ Status code incorrecto: ${response.statusCode}');
         setState(() {
           _errorMessage = 'Error ${response.statusCode}';
         });
       }
     } on DioException catch (e) {
       print('❌ DioError: ${e.message}');
-      print('❌ Type: ${e.type}');
-      print('❌ Response: ${e.response?.data}');
-      print('❌ Status code: ${e.response?.statusCode}');
-
       String errorMessage = 'Error al cargar productos';
       if (e.response?.statusCode == 404) {
         errorMessage = 'Endpoint no encontrado (404)';
       } else if (e.type == DioExceptionType.connectionError) {
         errorMessage = 'Error de conexión';
-      } else if (e.response?.statusCode == 500) {
-        errorMessage = 'Error interno del servidor';
       } else if (e.response?.data != null &&
           e.response?.data['error'] != null) {
         errorMessage = e.response?.data['error'];
       }
-
       setState(() {
         _errorMessage = errorMessage;
       });
-    } catch (e, stackTrace) {
+    } catch (e) {
       print('❌ Error inesperado: $e');
-      print('📚 StackTrace: $stackTrace');
       setState(() {
         _errorMessage = 'Error inesperado';
       });
@@ -251,14 +276,10 @@ class _ProductosScreenState extends State<ProductosScreen> {
 
   Future<void> _cargarMasProductos() async {
     if (_isLoadingMore || !_hasMore) return;
-
-    print('📦 Cargando más productos...');
     setState(() {
       _isLoadingMore = true;
     });
-
     await _cargarProductos();
-
     setState(() {
       _isLoadingMore = false;
     });
@@ -280,52 +301,10 @@ class _ProductosScreenState extends State<ProductosScreen> {
     _cargarProductos(reset: true);
   }
 
-  // Función para mostrar imágenes Base64
-  Widget _buildImageFromBase64(String? base64String) {
-    if (base64String == null) {
-      return Icon(
-        Icons.image_not_supported,
-        size: 40,
-        color: Colors.grey.shade400,
-      );
-    }
-
-    try {
-      String base64Data = base64String;
-      if (base64String.startsWith('data:image')) {
-        final parts = base64String.split(',');
-        if (parts.length > 1) {
-          base64Data = parts[1];
-        }
-      }
-
-      final imageBytes = base64Decode(base64Data);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          imageBytes,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            print('❌ Error cargando imagen Base64: $error');
-            return Icon(
-              Icons.broken_image,
-              size: 40,
-              color: Colors.grey.shade400,
-            );
-          },
-        ),
-      );
-    } catch (e) {
-      print('❌ Error decodificando Base64: $e');
-      return Icon(Icons.error_outline, size: 40, color: Colors.grey.shade400);
-    }
-  }
-
   // VISTA DE LISTA
   Widget _buildListView() {
     return ListView.builder(
-      physics:
-          const AlwaysScrollableScrollPhysics(), // 👈 IMPORTANTE: Siempre scrollable
+      physics: const AlwaysScrollableScrollPhysics(),
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: _productos.length + (_hasMore ? 1 : 0),
@@ -344,8 +323,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
   // VISTA DE CUADRÍCULA
   Widget _buildGridView() {
     return GridView.builder(
-      physics:
-          const AlwaysScrollableScrollPhysics(), // 👈 IMPORTANTE: Siempre scrollable
+      physics: const AlwaysScrollableScrollPhysics(),
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -369,10 +347,9 @@ class _ProductosScreenState extends State<ProductosScreen> {
     );
   }
 
-  // Widget para cuando no hay datos (siempre scrollable)
   Widget _buildEmptyState() {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(), // 👈 Siempre scrollable
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 300),
         Center(
@@ -393,15 +370,14 @@ class _ProductosScreenState extends State<ProductosScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 300), // Espacio extra para poder hacer scroll
+        const SizedBox(height: 300),
       ],
     );
   }
 
-  // Widget para cuando hay error (siempre scrollable)
   Widget _buildErrorState() {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(), // 👈 Siempre scrollable
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 300),
         Center(
@@ -419,15 +395,14 @@ class _ProductosScreenState extends State<ProductosScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 300), // Espacio extra para poder hacer scroll
+        const SizedBox(height: 300),
       ],
     );
   }
 
-  // Widget para cuando está cargando (siempre scrollable)
   Widget _buildLoadingState() {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(), // 👈 Siempre scrollable
+      physics: const AlwaysScrollableScrollPhysics(),
       children: const [
         SizedBox(height: 300),
         Center(child: CircularProgressIndicator()),
@@ -436,7 +411,6 @@ class _ProductosScreenState extends State<ProductosScreen> {
     );
   }
 
-  // 👇 FUNCIÓN PARA CREAR EL FAB DEL CARRITO
   Widget _buildCarritoFAB(BuildContext context) {
     return Consumer<CarritoProvider>(
       builder: (context, carrito, child) {
@@ -510,7 +484,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                   color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: _buildImageFromBase64(producto.imagenUrl),
+                child: _buildProductImage(producto.imagenUrl),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -648,7 +622,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                child: _buildImageFromBase64(producto.imagenUrl),
+                child: _buildProductImage(producto.imagenUrl),
               ),
             ),
             Padding(
@@ -749,7 +723,6 @@ class _ProductosScreenState extends State<ProductosScreen> {
   }
 
   void _mostrarFiltros(BuildContext context) {
-    print('📊 Mostrando filtros de categoría');
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -775,19 +748,15 @@ class _ProductosScreenState extends State<ProductosScreen> {
                     label: const Text('Todas'),
                     selected: _categoriaSeleccionada == null,
                     onSelected: (_) {
-                      print('🗑️ Limpiando filtro de categoría');
                       Navigator.pop(context);
                       _seleccionarCategoria(null);
                     },
                   ),
                   ..._categorias.map((categoria) {
                     return FilterChip(
-                      label: Text(
-                        '${categoria.nombre} (${categoria.productosCount})',
-                      ),
+                      label: Text(categoria.nombre),
                       selected: _categoriaSeleccionada == categoria.id,
                       onSelected: (_) {
-                        print('📁 Seleccionada categoría: ${categoria.nombre}');
                         Navigator.pop(context);
                         _seleccionarCategoria(categoria.id);
                       },
@@ -795,7 +764,6 @@ class _ProductosScreenState extends State<ProductosScreen> {
                   }),
                 ],
               ),
-              const SizedBox(height: 20),
             ],
           ),
         );

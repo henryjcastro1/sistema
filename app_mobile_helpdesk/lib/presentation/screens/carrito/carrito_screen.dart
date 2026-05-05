@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
-import '../../../core/utils/currency_formatter.dart'; // 👈 AGREGAR
+import '../../../core/utils/currency_formatter.dart';
 import '../../providers/carrito_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -12,9 +12,24 @@ import '../../../domain/services/storage_service.dart';
 class CarritoScreen extends StatelessWidget {
   const CarritoScreen({super.key});
 
-  // Función para mostrar imágenes Base64
-  Widget _buildImageFromBase64(String? base64String) {
-    if (base64String == null) {
+  // 🔥 FUNCIÓN PARA CONSTRUIR URL COMPLETA DE IMÁGENES
+  String _getFullImageUrl(String? imagePath) {
+    if (imagePath == null || imagePath.isEmpty) return '';
+
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    if (imagePath.startsWith('data:image')) {
+      return imagePath;
+    }
+
+    return 'http://192.168.1.7:3000$imagePath';
+  }
+
+  // 🔥 FUNCIÓN PARA MOSTRAR IMÁGENES (URL o Base64)
+  Widget _buildProductImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
       return Icon(
         Icons.image_not_supported,
         size: 30,
@@ -22,35 +37,71 @@ class CarritoScreen extends StatelessWidget {
       );
     }
 
-    try {
-      String base64Data = base64String;
-      if (base64String.startsWith('data:image')) {
-        final parts = base64String.split(',');
-        if (parts.length > 1) {
-          base64Data = parts[1];
+    // Si es Base64
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        String base64Data = imageUrl;
+        if (imageUrl.contains(',')) {
+          base64Data = imageUrl.split(',').last;
         }
+        final imageBytes = base64Decode(base64Data);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            imageBytes,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              print('❌ Error cargando imagen Base64: $error');
+              return Icon(
+                Icons.broken_image,
+                size: 30,
+                color: Colors.grey.shade400,
+              );
+            },
+          ),
+        );
+      } catch (e) {
+        print('❌ Error decodificando Base64: $e');
+        return Icon(Icons.error_outline, size: 30, color: Colors.grey.shade400);
       }
-
-      final imageBytes = base64Decode(base64Data);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          imageBytes,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            print('❌ Error cargando imagen Base64: $error');
-            return Icon(
-              Icons.broken_image,
-              size: 30,
-              color: Colors.grey.shade400,
-            );
-          },
-        ),
-      );
-    } catch (e) {
-      print('❌ Error decodificando Base64: $e');
-      return Icon(Icons.error_outline, size: 30, color: Colors.grey.shade400);
     }
+
+    // Si es URL de red
+    final fullUrl = _getFullImageUrl(imageUrl);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        fullUrl,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          print('❌ Error cargando imagen de red: $error');
+          print('📸 URL: $fullUrl');
+          return Icon(
+            Icons.broken_image,
+            size: 30,
+            color: Colors.grey.shade400,
+          );
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                    : null,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // Función para mostrar diálogo de login
@@ -93,13 +144,11 @@ class CarritoScreen extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final storageService = getIt<StorageService>();
 
-    // 👇 VALIDACIÓN DE AUTENTICACIÓN (Capa 1)
     if (!authProvider.isAuthenticated) {
       _mostrarDialogoLogin(context);
       return;
     }
 
-    // Validar que el carrito no esté vacío
     if (carritoProvider.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -111,7 +160,6 @@ class CarritoScreen extends StatelessWidget {
       return;
     }
 
-    // Mostrar diálogo de confirmación
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -149,7 +197,6 @@ class CarritoScreen extends StatelessWidget {
     try {
       final token = await storageService.getToken();
 
-      // Mostrar indicador de carga
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -167,15 +214,12 @@ class CarritoScreen extends StatelessWidget {
         ),
       );
 
-      // Cerrar indicador de carga
       if (context.mounted) Navigator.pop(context);
 
       if (response.statusCode == 200) {
-        // Limpiar carrito después de pedido exitoso
         carritoProvider.limpiarCarrito();
 
         if (context.mounted) {
-          // Mostrar mensaje de éxito
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('✅ Pedido creado exitosamente'),
@@ -183,18 +227,14 @@ class CarritoScreen extends StatelessWidget {
               behavior: SnackBarBehavior.floating,
             ),
           );
-
-          // Regresar a la pantalla anterior
           Navigator.pop(context);
         }
       }
     } on DioException catch (e) {
-      // Cerrar indicador de carga si estaba abierto
       if (context.mounted) Navigator.pop(context);
 
       String errorMessage = 'Error al crear pedido';
 
-      // Manejar errores específicos
       if (e.response?.statusCode == 400) {
         errorMessage = e.response?.data['error'] ?? 'Error en la solicitud';
       } else if (e.response?.statusCode == 401) {
@@ -232,7 +272,6 @@ class CarritoScreen extends StatelessWidget {
       ),
       body: Consumer2<CarritoProvider, AuthProvider>(
         builder: (context, carrito, auth, child) {
-          // Mostrar banner si no está autenticado
           if (!auth.isAuthenticated && !carrito.isEmpty) {
             return Column(
               children: [
@@ -329,7 +368,6 @@ class CarritoScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
-                      // Imagen
                       Container(
                         width: 60,
                         height: 60,
@@ -337,10 +375,9 @@ class CarritoScreen extends StatelessWidget {
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: _buildImageFromBase64(item.producto.imagenUrl),
+                        child: _buildProductImage(item.producto.imagenUrl),
                       ),
                       const SizedBox(width: 12),
-                      // Información
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,25 +409,10 @@ class CarritoScreen extends StatelessWidget {
                                   icon: const Icon(Icons.remove_circle_outline),
                                   onPressed: () {
                                     final nuevaCantidad = item.cantidad - 1;
-                                    final actualizado = carrito
-                                        .actualizarCantidad(
-                                          item.producto.id,
-                                          nuevaCantidad,
-                                        );
-
-                                    if (!actualizado && context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Error al actualizar cantidad',
-                                          ),
-                                          backgroundColor: Colors.red,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    }
+                                    carrito.actualizarCantidad(
+                                      item.producto.id,
+                                      nuevaCantidad,
+                                    );
                                   },
                                   iconSize: 20,
                                 ),
@@ -410,7 +432,6 @@ class CarritoScreen extends StatelessWidget {
                                           item.producto.id,
                                           nuevaCantidad,
                                         );
-
                                     if (!actualizado && context.mounted) {
                                       ScaffoldMessenger.of(
                                         context,
@@ -432,7 +453,6 @@ class CarritoScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // Subtotal y eliminar
                       Column(
                         children: [
                           Text(
@@ -462,7 +482,6 @@ class CarritoScreen extends StatelessWidget {
             },
           ),
         ),
-        // Resumen y botón de compra
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(

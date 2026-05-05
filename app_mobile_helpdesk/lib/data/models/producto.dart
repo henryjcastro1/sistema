@@ -1,6 +1,38 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../core/utils/currency_formatter.dart'; // 👈 Agregar para formato de moneda
+import '../../core/utils/currency_formatter.dart';
+
+// 🔥 NUEVA CLASE: Para imágenes adicionales
+class ProductoImagen {
+  final int id;
+  final String imagenUrl;
+  final int orden;
+  final bool esPrincipal;
+
+  ProductoImagen({
+    required this.id,
+    required this.imagenUrl,
+    required this.orden,
+    required this.esPrincipal,
+  });
+
+  factory ProductoImagen.fromJson(Map<String, dynamic> json) {
+    return ProductoImagen(
+      id: json['id'] ?? 0,
+      imagenUrl: json['imagen_url'] ?? '',
+      orden: json['orden'] ?? 0,
+      esPrincipal: json['es_principal'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'imagen_url': imagenUrl,
+      'orden': orden,
+      'es_principal': esPrincipal,
+    };
+  }
+}
 
 class Producto {
   final String id;
@@ -11,6 +43,7 @@ class Producto {
   final double? precioEur;
   final int stock;
   final String? imagenUrl;
+  final List<ProductoImagen>? imagenesAdicionales; // 🔥 NUEVO CAMPO
   final bool activo;
   final bool destacado;
   final String? marca;
@@ -24,9 +57,9 @@ class Producto {
   final String? subcategoriaId;
   final String? categoriaNombre;
   final String? subcategoriaNombre;
-  final String? monedaId; // 👈 NUEVO
-  final String? monedaCodigo; // 👈 NUEVO
-  final String? monedaSimbolo; // 👈 NUEVO
+  final String? monedaId;
+  final String? monedaCodigo;
+  final String? monedaSimbolo;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -39,6 +72,7 @@ class Producto {
     this.precioEur,
     required this.stock,
     this.imagenUrl,
+    this.imagenesAdicionales, // 🔥 NUEVO PARÁMETRO
     required this.activo,
     required this.destacado,
     this.marca,
@@ -52,9 +86,9 @@ class Producto {
     this.subcategoriaId,
     this.categoriaNombre,
     this.subcategoriaNombre,
-    this.monedaId, // 👈 NUEVO
-    this.monedaCodigo, // 👈 NUEVO
-    this.monedaSimbolo, // 👈 NUEVO
+    this.monedaId,
+    this.monedaCodigo,
+    this.monedaSimbolo,
     this.createdAt,
     this.updatedAt,
   });
@@ -72,12 +106,19 @@ class Producto {
       }
     }
 
+    // 🔥 PROCESAR IMÁGENES ADICIONALES
+    List<ProductoImagen>? imagenesAdicionales;
+    if (json['imagenes_adicionales'] != null &&
+        json['imagenes_adicionales'] is List) {
+      imagenesAdicionales = (json['imagenes_adicionales'] as List)
+          .map((img) => ProductoImagen.fromJson(img))
+          .toList();
+    }
+
     return Producto(
       id: json['id'] ?? '',
       nombre: json['nombre'] ?? '',
       descripcion: json['descripcion'],
-
-      // Precio principal (en moneda base)
       precio:
           safeParse<double>(
             json['precio'],
@@ -85,55 +126,44 @@ class Producto {
                 v is String ? double.tryParse(v) ?? 0 : (v as num).toDouble(),
           ) ??
           0,
-
-      // Precio en USD
       precioUsd: safeParse<double>(
         json['precio_usd'],
         (v) => v is String ? double.tryParse(v) : (v as num?)?.toDouble(),
       ),
-
-      // Precio en EUR
       precioEur: safeParse<double>(
         json['precio_eur'],
         (v) => v is String ? double.tryParse(v) : (v as num?)?.toDouble(),
       ),
-
       stock:
           safeParse<int>(
             json['stock'],
             (v) => v is String ? int.tryParse(v) : v as int?,
           ) ??
           0,
-
       imagenUrl: json['imagen_url'],
+      imagenesAdicionales: imagenesAdicionales, // 🔥 NUEVO
       activo: json['activo'] ?? true,
       destacado: json['destacado'] ?? false,
       marca: json['marca'],
       modelo: json['modelo'],
       sku: json['sku'],
       codigoBarras: json['codigo_barras'],
-
       garantiaMeses: safeParse<int>(
         json['garantia_meses'],
         (v) => v is String ? int.tryParse(v) : v as int?,
       ),
-
       pesoKg: safeParse<double>(
         json['peso_kg'],
         (v) => v is String ? double.tryParse(v) : (v as num?)?.toDouble(),
       ),
-
       dimensiones: json['dimensiones'],
       categoriaId: json['categoria_id'],
       subcategoriaId: json['subcategoria_id'],
       categoriaNombre: json['categoria_nombre'],
       subcategoriaNombre: json['subcategoria_nombre'],
-
-      // 👇 NUEVOS CAMPOS DE MONEDA
       monedaId: json['moneda_id'],
       monedaCodigo: json['moneda_codigo'],
       monedaSimbolo: json['moneda_simbolo'],
-
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -154,6 +184,9 @@ class Producto {
       'precio_eur': precioEur,
       'stock': stock,
       'imagen_url': imagenUrl,
+      'imagenes_adicionales': imagenesAdicionales
+          ?.map((img) => img.toJson())
+          .toList(),
       'activo': activo,
       'destacado': destacado,
       'marca': marca,
@@ -171,7 +204,36 @@ class Producto {
     };
   }
 
-  // Getters útiles
+  // 🔥 GETTERS PARA IMÁGENES
+  List<String> get todasLasImagenes {
+    final List<String> imagenes = [];
+
+    if (imagenUrl != null && imagenUrl!.isNotEmpty) {
+      imagenes.add(imagenUrl!);
+    }
+
+    if (imagenesAdicionales != null) {
+      for (final img in imagenesAdicionales!) {
+        if (img.imagenUrl.isNotEmpty) {
+          imagenes.add(img.imagenUrl);
+        }
+      }
+    }
+
+    return imagenes;
+  }
+
+  String get primeraImagen {
+    if (imagenUrl != null && imagenUrl!.isNotEmpty) return imagenUrl!;
+    if (imagenesAdicionales != null && imagenesAdicionales!.isNotEmpty) {
+      return imagenesAdicionales!.first.imagenUrl;
+    }
+    return '';
+  }
+
+  int get cantidadImagenes => todasLasImagenes.length;
+
+  // Getters existentes
   String get precioFormateado {
     return CurrencyFormatter.format(
       precio,
